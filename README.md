@@ -50,8 +50,8 @@ Con [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  "NvChad/katana.nvim",
-  dependencies = { "NvChad/volt" }, -- sólo si no lo tienes ya
+  "rosasrias/Katana.nvim",
+  dependencies = { "nvim-mini/mini.icons" },
   opts = {
     keymap = "<leader>ca",
   },
