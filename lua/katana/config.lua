@@ -157,6 +157,8 @@ M.defaults = {
 
   -- Milisegundos de espera para la petición de diagnósticos.
   pull_timeout = 2000,
+  -- Milisegundos de espera para cada petición de codeAction.
+  lsp_request_timeout = 3000,
 
   -- Aspecto de la fila seleccionada. Por defecto se derivan del tema; si el tema
   -- no tiene un color de selección suficientemente distinto (es el caso de

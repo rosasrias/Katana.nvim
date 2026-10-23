@@ -30,9 +30,12 @@ function M.setup(opts)
 
   -- El comando y el atajo se crean aquí (y no sólo en `plugin/katana.lua`) para
   -- que funcionen aunque el usuario llame a `setup()` con otras opciones.
-  pcall(function()
+  local ok_plugin, err_plugin = pcall(function()
     require("katana.plugin").ensure()
   end)
+  if not ok_plugin then
+    vim.notify("Katana: fallo al crear comandos/atajos: " .. tostring(err_plugin), vim.log.levels.WARN)
+  end
 
   return options
 end

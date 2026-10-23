@@ -35,6 +35,7 @@ end
 ---@param action KatanaAction
 ---@param bufnr integer
 ---@return vim.lsp.Client|nil
+---@return string|nil error
 local function find_client(action, bufnr)
   local clients = vim.lsp.get_clients({ bufnr = bufnr })
 
@@ -44,8 +45,21 @@ local function find_client(action, bufnr)
         return client
       end
     end
+    -- Si la acción proviene de un cliente concreto y ya no existe, NO hacemos fallback.
+    if action._client_name or action.source and action.source:match("^lsp:") then
+      return nil, string.format("cliente LSP '%s' ya no está disponible para esta acción", action._client_name or action.source)
+    end
+    -- Si no hay indicios claros de origen LSP concreto, seguimos con comportamiento
+    -- conservador solo cuando hay clientes disponibles.
+    if #clients == 0 then
+      return nil
+    end
+    return nil, "no se encontró el cliente LSP que originó esta acción"
   end
 
+  if #clients == 0 then
+    return nil
+  end
   return clients[1]
 end
 
@@ -53,6 +67,7 @@ end
 ---@param action KatanaAction
 ---@param opts KatanaExecutorOptions
 ---@return boolean ok
+---@return string|nil error
 function M.apply_edit(action, opts)
   local edit = action.edit
   if type(edit) ~= "table" then
@@ -61,14 +76,34 @@ function M.apply_edit(action, opts)
 
   local encoding = action.encoding or "utf-16"
   local groups = workspace.collect_edits(edit)
+  local applied = 0
 
   for _, group in ipairs(groups) do
     local target = workspace.resolve_buf(group, opts.bufnr)
-    if target and vim.fn.bufloaded(target) == 1 then
-      -- Cierra el bloque de undo previo para que la acción se deshaga sola.
-      workspace.close_undo_block(target)
-      workspace.apply_edits_to_buffer(target, group.edits, encoding)
+    if target then
+      if vim.fn.bufloaded(target) == 0 then
+        -- Carga el buffer antes de aplicar para no omitir archivos no cargados.
+        pcall(vim.fn.bufload, target)
+      end
+
+      if vim.fn.bufloaded(target) == 1 and vim.api.nvim_buf_is_valid(target) then
+        -- Cierra el bloque de undo previo para que la acción se deshaga sola.
+        workspace.close_undo_block(target)
+        local ok_apply, err_apply = pcall(workspace.apply_edits_to_buffer, target, group.edits, encoding)
+        if not ok_apply then
+          return false, string.format("error al aplicar cambios en %s: %s", vim.api.nvim_buf_get_name(target), tostring(err_apply))
+        end
+        applied = applied + 1
+      else
+        return false, string.format("no se pudo cargar el buffer para aplicar cambios en %s", vim.api.nvim_buf_get_name(target))
+      end
+    else
+      return false, "no se pudo resolver el buffer destino del WorkspaceEdit"
     end
+  end
+
+  if applied == 0 then
+    return false, "el WorkspaceEdit no contiene cambios aplicables"
   end
 
   return true
@@ -78,6 +113,7 @@ end
 ---@param action KatanaAction
 ---@param opts KatanaExecutorOptions
 ---@return boolean ok
+---@return string|nil error
 function M.run_command(action, opts)
   local command = action.command
   if not command then
@@ -86,7 +122,10 @@ function M.run_command(action, opts)
 
   -- Algunos servidores envían el comando como una cadena simple.
   if type(command) == "string" then
-    vim.cmd(command)
+    local ok_cmd, err_cmd = pcall(vim.cmd, command)
+    if not ok_cmd then
+      return false, string.format("error al ejecutar comando: %s", tostring(err_cmd))
+    end
     return true
   end
 
@@ -94,15 +133,21 @@ function M.run_command(action, opts)
     return true
   end
 
-  local client = find_client(action, opts.bufnr)
+  local client, err_client = find_client(action, opts.bufnr)
   if not client then
-    notify_error(string.format("no LSP client available to run command '%s'", command.command))
-    return false
+    local msg = err_client or string.format("no LSP client available to run command '%s'", command.command)
+    notify_error(msg)
+    return false, msg
   end
 
   -- `Client:exec_cmd(cmd, context, handler)`: `cmd` es el objeto completo y el
   -- contexto aporta `bufnr` y `client_id`.
-  client:exec_cmd(command, { bufnr = opts.bufnr })
+  local ok_exec, err_exec = pcall(function()
+    client:exec_cmd(command, { bufnr = opts.bufnr })
+  end)
+  if not ok_exec then
+    return false, string.format("error al ejecutar comando '%s': %s", command.command, tostring(err_exec))
+  end
 
   return true
 end
@@ -111,6 +156,7 @@ end
 ---@param action KatanaAction
 ---@param opts KatanaExecutorOptions
 ---@return boolean ok
+---@return string|nil error
 function M.run_execute_fn(action, opts)
   if type(action.execute_fn) ~= "function" then
     return true
@@ -120,7 +166,10 @@ function M.run_execute_fn(action, opts)
   -- de undo para que su reversión sea independiente.
   workspace.close_undo_block(opts.bufnr)
 
-  action.execute_fn(action)
+  local ok_fn, err_fn = pcall(action.execute_fn, action)
+  if not ok_fn then
+    return false, tostring(err_fn)
+  end
 
   return true
 end
@@ -195,14 +244,32 @@ function M.execute(action, opts)
   end
 
   local function run(resolved)
-    local ok, err = pcall(function()
-      M.apply_edit(resolved, opts)
-      M.run_command(resolved, opts)
-      M.run_execute_fn(resolved, opts)
-    end)
+    local applied = false
+    local ok_edit, err_edit = M.apply_edit(resolved, opts)
+    if not ok_edit then
+      notify_error(string.format("fallo al aplicar cambios de '%s'", resolved.title or "?"), err_edit)
+      return
+    end
+    applied = true
 
-    if not ok then
-      notify_error(string.format("failed to execute '%s'", resolved.title or "?"), err)
+    local ok_cmd, err_cmd = M.run_command(resolved, opts)
+    if not ok_cmd then
+      if applied then
+        notify_error(string.format("el comando falló tras aplicar cambios parciales para '%s'", resolved.title or "?"), err_cmd)
+      else
+        notify_error(string.format("fallo al ejecutar comando de '%s'", resolved.title or "?"), err_cmd)
+      end
+      return
+    end
+
+    local ok_fn, err_fn = M.run_execute_fn(resolved, opts)
+    if not ok_fn then
+      if applied then
+        notify_error(string.format("la acción personalizada falló tras aplicar cambios parciales para '%s'", resolved.title or "?"), err_fn)
+      else
+        notify_error(string.format("fallo en la acción personalizada '%s'", resolved.title or "?"), err_fn)
+      end
+      return
     end
   end
 

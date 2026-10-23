@@ -143,6 +143,13 @@ function M.collect(opts)
     add("    error: %s", tostring(last.error))
   end
 
+  if last.fetch_errors and #last.fetch_errors > 0 then
+    add("    errores de recogida: %d", #last.fetch_errors)
+    for i, err in ipairs(last.fetch_errors) do
+      add("      %d) %s: %s", i, tostring(err.source), tostring(err.err))
+    end
+  end
+
   if state.open then
     add(
       "    (ahora mismo) acciones=%d  filtradas=%d  filas=%d  filtro=%q",

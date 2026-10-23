@@ -13,6 +13,7 @@ local workspace = require("katana.lsp.workspace")
 local config = require("katana.config")
 
 local M = {}
+local state = require("katana.state")
 
 ---@class KatanaAction
 ---@field title string Título legible de la acción
@@ -660,12 +661,28 @@ local function request_lsp(client, ctx, opts, done)
 
   local collected = {}
   local finished = false
+  local timers = {}
+
+  local function cleanup_timers()
+    for _, timer in ipairs(timers) do
+      if timer then
+        pcall(function()
+          timer:stop()
+          if not timer:is_closing() then
+            timer:close()
+          end
+        end)
+      end
+    end
+    timers = {}
+  end
 
   local function finish()
     if finished then
       return
     end
     finished = true
+    cleanup_timers()
     done(collected)
   end
 
@@ -679,19 +696,50 @@ local function request_lsp(client, ctx, opts, done)
       context = context,
     }
 
+    local timeout_ms = opts.request_timeout or config.options.lsp_request_timeout or 3000
+    local req_finished = false
+
+    local function safe_cb(actions)
+      if req_finished or finished then
+        return
+      end
+      req_finished = true
+      cb(actions or {})
+    end
+
+    local timer = vim.uv.new_timer()
+    if timer then
+      timers[#timers + 1] = timer
+      timer:start(timeout_ms, 0, function()
+        vim.schedule(function()
+          if req_finished or finished then
+            return
+          end
+          req_finished = true
+          pcall(function()
+            vim.notify("Katana: timeout de codeAction en " .. (client.name or "?"), vim.log.levels.WARN)
+          end)
+          safe_cb({})
+        end)
+      end)
+    end
+
     local ok = pcall(function()
       client:request("textDocument/codeAction", params, function(err, result)
+        if req_finished or finished then
+          return
+        end
         if err ~= nil or type(result) ~= "table" then
-          cb({})
+          safe_cb({})
           return
         end
 
-        cb(M.normalize_lsp_actions(result, client, ctx))
+        safe_cb(M.normalize_lsp_actions(result, client, ctx))
       end, ctx.bufnr)
     end)
 
     if not ok then
-      cb({})
+      safe_cb({})
     end
   end
 
@@ -728,7 +776,24 @@ local function request_lsp(client, ctx, opts, done)
   -- así el rango de la petición puede ser el del error aunque todavía no se
   -- hayan publicado.
   if #diagnostics == 0 and config.options.pull_diagnostics ~= false then
+    local pull_timeout = opts.pull_timeout or config.options.pull_timeout or 2000
+    local pull_timer = vim.uv.new_timer()
+    if pull_timer then
+      timers[#timers + 1] = pull_timer
+      pull_timer:start(pull_timeout, 0, function()
+        vim.schedule(function()
+          if finished then
+            return
+          end
+          run(M.diagnostics_on_row({}, ctx.cursor.row))
+        end)
+      end)
+    end
+
     M.pull_diagnostics(client, ctx, function(pulled)
+      if finished then
+        return
+      end
       run(M.diagnostics_on_row(pulled, ctx.cursor.row))
     end)
   else
@@ -756,23 +821,37 @@ function M.get_all_actions(ctx, opts, done)
     end
   end
 
+  local errors = {}
+  local function record_error(source, err)
+    errors[#errors + 1] = { source = source, err = err }
+    pcall(function()
+      vim.notify("Katana: error en " .. source .. ": " .. tostring(err), vim.log.levels.DEBUG)
+    end)
+  end
+
   -- 1. Proveedores registrados por el usuario.
   local ok_providers, provider_actions = pcall(require("katana.core.providers").collect, ctx)
-  if ok_providers and type(provider_actions) == "table" then
+  if not ok_providers then
+    record_error("proveedor", provider_actions)
+  elseif type(provider_actions) == "table" then
     collect(provider_actions)
   end
 
   -- 2. Proveedor de Tree-sitter.
   if cfg.ts and cfg.ts.enabled then
     local ok_ts, ts_actions = pcall(require("katana.core.treesitter").get_actions, ctx)
-    if ok_ts and type(ts_actions) == "table" then
+    if not ok_ts then
+      record_error("proveedor treesitter", ts_actions)
+    elseif type(ts_actions) == "table" then
       collect(ts_actions)
     end
   end
 
   -- 3. Acciones registradas por el usuario.
   local ok_user, user_actions = pcall(require("katana.register").get_actions, ctx)
-  if ok_user and type(user_actions) == "table" then
+  if not ok_user then
+    record_error("acciones registradas", user_actions)
+  elseif type(user_actions) == "table" then
     collect(user_actions)
   end
 
@@ -787,6 +866,10 @@ function M.get_all_actions(ctx, opts, done)
       return
     end
     finished = true
+    if #errors > 0 then
+      state.last = state.last or {}
+      state.last.fetch_errors = errors
+    end
     done(collected)
   end
 
