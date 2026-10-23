@@ -777,24 +777,27 @@ local function request_lsp(client, ctx, opts, done)
   -- hayan publicado.
   if #diagnostics == 0 and config.options.pull_diagnostics ~= false then
     local pull_timeout = opts.pull_timeout or config.options.pull_timeout or 2000
+    local pull_done = false
     local pull_timer = vim.uv.new_timer()
     if pull_timer then
       timers[#timers + 1] = pull_timer
       pull_timer:start(pull_timeout, 0, function()
         vim.schedule(function()
-          if finished then
+          if finished or pull_done then
             return
           end
+          pull_done = true
           run(M.diagnostics_on_row({}, ctx.cursor.row))
         end)
       end)
     end
 
     M.pull_diagnostics(client, ctx, function(pulled)
-      if finished then
+      if finished or pull_done then
         return
       end
-      run(M.diagnostics_on_row(pulled, ctx.cursor.row))
+      pull_done = true
+      run(M.diagnostics_on_row(pulled or {}, ctx.cursor.row))
     end)
   else
     run(diagnostics)
