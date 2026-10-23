@@ -105,7 +105,6 @@ M.defaults = {
     command = "\u{f0633}",                   -- consola
     other = "\u{f0eb}",                      -- bombilla
     preferred = "★",
-    server = "\u{f423}",
   },
   border = "rounded",
   hide_disabled = false,

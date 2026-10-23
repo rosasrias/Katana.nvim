@@ -212,7 +212,6 @@ require("katana").setup({
     command = "󰅉",
     other = "•",
     preferred = "★",
-    server = "󰚩",
   },
 })
 ```

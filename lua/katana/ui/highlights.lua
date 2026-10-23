@@ -183,7 +183,6 @@ function M.setup()
   hl(state.ns_main, "KatanaSeparator", { fg = c.grey_fg2 })
 
   hl(state.ns_main, "KatanaNum", { fg = c.grey_fg })
-  hl(state.ns_main, "KatanaServer", { fg = c.grey_fg, italic = true })
   hl(state.ns_main, "KatanaSourceName", { fg = c.grey_fg, italic = true })
   hl(state.ns_main, "KatanaTitle", { fg = c.fg })
   hl(state.ns_main, "KatanaPreferred", { fg = c.yellow, bold = true })
