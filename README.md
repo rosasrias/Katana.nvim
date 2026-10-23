@@ -29,10 +29,12 @@ de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
 
 ### Aspecto
 
-- Cada **kind tiene su propio icono y su propio color** (no solo la familia):
-  `quickfix` rojo con llave inglesa, `refactor.extract` rosa, `refactor.inline`
-  azul, `refactor.rewrite` amarillo, `source.fixAll` amarillo con escoba, ... El
-  icono conserva ese color **también en la fila seleccionada**.
+- Cada **kind tiene su propio icono y su propio color** (no solo la familia). Con
+  `mini.icons` se usan sus glifos `nf-md-*` con los grupos `MiniIcons*` del tema;
+  si no está disponible se usan los iconos de `config.options.icons` con los
+  grupos `Katana*`. El icono conserva ese color **también en la fila seleccionada**. Los
+  grupos `MiniIcons*` se replican en el namespace del picker con sus variantes
+  `*Sel` para mantener el color sobre la fila activa.
 - La fila activa se marca con **fondo propio + barra izquierda `▎`**, de modo que
   se distingue aunque el tema no tenga un color de selección contrastado. El
   fondo se calcula a partir del tema y, si queda demasiado cerca del fondo de la
@@ -51,7 +53,10 @@ Con [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   "rosasrias/Katana.nvim",
-  dependencies = { "nvim-mini/mini.icons" },
+  dependencies = {
+    "NvChad/volt",          -- obligatorio: motor de la UI
+    "nvim-mini/mini.icons", -- opcional: iconos nf-md
+  },
   opts = {
     keymap = "<leader>ca",
   },
@@ -60,6 +65,11 @@ Con [lazy.nvim](https://github.com/folke/lazy.nvim):
   end,
 }
 ```
+
+Volt es una dependencia **obligatoria**: Katana lo requiere al cargar la UI
+(`lua/katana/ui/window.lua` y `lua/katana/ui/list.lua`). Sin él, el picker falla
+con `module 'volt' not found`. `mini.icons` es opcional; si no está, se usan los
+iconos de `config.options.icons`.
 
 Si lo tienes en local (`dir = "..."`), cambia la primera entrada por la ruta.
 
@@ -220,7 +230,7 @@ A igualdad se desempata con `kind_weights`, `lsp_weights` y, en último caso, de
 forma alfabética.
 
 Con `dedupe = true`, las acciones con el mismo `title` + `kind` se fusionan en una
-sola entrada que acumula todos sus orígenes (se muestran entre paréntesis).
+sola entrada que acumula todos sus orígenes (se muestran separados por comas).
 
 ---
 
@@ -239,7 +249,7 @@ require("katana").open({
   bufnr = nil,            -- buffer (por defecto, el actual)
   win = nil,              -- ventana (por defecto, la actual)
   scope = "cursor",       -- "cursor" | "line" | "visual"
-  only = nil,             -- string[] de kinds LSP a requesting
+  only = nil,             -- string[] de kinds LSP a pedir
 })
 ```
 
@@ -451,12 +461,12 @@ todo lo que determina el resultado de la petición:
 
 Es el primer sitio donde mirar cuando un servidor "no ofrece" nada.
 
-Distinguir los dos finales de la lista es la clave para saber dónde está el
-problema:
+El picker se abre una vez recibida la respuesta del servidor; mientras tanto no
+se muestra la UI. Distinguir los dos casos de `No matching actions` es la clave
+para saber dónde está el problema:
 
 | Lo que muestra la lista | Qué significa |
 | --- | --- |
-| `Buscando acciones…` | El picker está abierto y aún espera la respuesta del servidor |
 | `No matching actions` + filtro vacío | El servidor no devolvió acciones (o todas eran `disabled`) |
 | `No matching actions` + filtro con texto | El filtro está descartando todo: borra el texto (`<C-u>` en el prompt) |
 
@@ -511,7 +521,7 @@ lua/katana/
 │   ├── list.lua          -- render de la lista con Volt
 │   ├── filter.lua        -- filtrado en vivo fuzzy
 │   ├── mappings.lua      -- keymaps de la lista y del prompt
-│   └── highlights.lua    -- highlights (KatanaSelected, KatanaHeader, ...)
+│   └── highlights.lua    -- highlights (KatanaSelected, KatanaHeader, MiniIcons*, ...)
 └── preview/
     └── diff.lua          -- previsualización reactiva del diff
 
@@ -526,8 +536,8 @@ scripts/                  -- pruebas headless (smoke, ui, e2e)
 Pruebas headless (no necesitan interfaz):
 
 ```bash
-nvim --headless -u NONE -l scripts/smoke.lua   # motor (25 comprobaciones)
-nvim --headless -u NONE -l scripts/ui.lua      # UI sobre Volt (32 comprobaciones)
+nvim --headless -u NONE -l scripts/smoke.lua   # motor (49 comprobaciones)
+nvim --headless -u NONE -l scripts/ui.lua      # UI sobre Volt (46 comprobaciones)
 nvim --headless -u NONE -l scripts/e2e.lua     # LSP real con clangd (12 comprobaciones)
 ```
 

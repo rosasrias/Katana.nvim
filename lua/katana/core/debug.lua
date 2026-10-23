@@ -128,9 +128,8 @@ function M.collect(opts)
   add("  picker:")
   add("    fase: %s", tostring(last.phase or "(nunca se abrió)"))
   add(
-    "    abierto=%s  cargando=%s  filtro=%q",
+    "    abierto=%s  filtro=%q",
     tostring(last.open),
-    tostring(last.loading),
     tostring(last.query or "")
   )
   add(

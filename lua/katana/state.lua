@@ -65,10 +65,6 @@ M.au_close = nil
 ---@type integer|nil
 M.au_filter = nil
 
---- Picker abierto pero todavía sin acciones (se están pidiendo al servidor).
----@type boolean
-M.loading = false
-
 --- Último estado conocido del picker, para `:KatanaDebug`.
 ---
 --- Sobrevive a `reset()`: cuando algo va mal en la fase del picker conviene saber
@@ -83,7 +79,6 @@ function M.snapshot(phase)
     phase = phase,
     at = vim.uv.now(),
     open = M.open,
-    loading = M.loading,
     query = M.query,
     actions = #M.actions,
     filtered = #M.filtered,
@@ -136,7 +131,6 @@ function M.reset()
   M.query = ""
   M.on_select = nil
   M.open = false
-  M.loading = false
 end
 
 return M

@@ -16,7 +16,9 @@ function M.build(actions)
       groups_map[gk] = {
         key = gk,
         kind = action.kind,
-        label = utils.kind_label(action.kind),
+        -- El label sale del grupo, no del primer subkind: "source.fixAll.eslint"
+        -- debe mostrar "Source: Fix All", no "Source: fixAll: eslint".
+        label = utils.kind_label(gk),
         actions = {},
       }
     end

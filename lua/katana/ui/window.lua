@@ -70,7 +70,7 @@ function M.rebuild()
   list.render()
   preview.update()
 
-  state.snapshot(M.loading and "cargando" or "reconstruido")
+  state.snapshot("reconstruido")
 end
 
 --- Repinta la lista y la previsualización.

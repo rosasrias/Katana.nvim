@@ -171,7 +171,7 @@ function M.rows(limit)
 
   if #rows == 0 then
     rows = {
-      { { state.loading and "  Buscando acciones…" or "  No matching actions", "Comment" } },
+      { { "  No matching actions", "Comment" } },
     }
   end
 

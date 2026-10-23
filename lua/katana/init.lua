@@ -144,9 +144,7 @@ function M._on_actions(actions, opts, ctx)
 
   local window = require("katana.ui.window")
 
-  -- Camino normal: el picker se abre justo ahora. Si ya está abierto en estado
-  -- de carga (`:KatanaDebug picker`, o un `<leader>ca` que se adelantó), se
-  -- rellena en su lugar para no cerrarlo y volverlo a abrir.
+  -- El picker se abre ahora, con las acciones ya recibidas y ordenadas.
   local open_ok, open_err = pcall(window.open, sorted, function(action)
     require("katana.apply").execute(action, {
       bufnr = bufnr,

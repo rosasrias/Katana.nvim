@@ -131,6 +131,12 @@ M.fallbacks = {
 }
 
 function M.setup()
+  if not state.ns_main then
+    state.ns_main = vim.api.nvim_create_namespace("KatanaMain")
+    state.ns_sel = vim.api.nvim_create_namespace("KatanaSelection")
+    state.ns_preview = vim.api.nvim_create_namespace("KatanaPreview")
+  end
+
   local c = palette()
   local hl = vim.api.nvim_set_hl
 

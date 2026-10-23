@@ -35,7 +35,7 @@ nvim --headless -u NONE -l scripts/ui.lua
 nvim --headless -u NONE -l scripts/e2e.lua
 ```
 
-Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (34 + 32 + 12
+Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 46 + 12
 comprobaciones). Si `Volt` o `clangd` no están disponibles, los scripts lo
 indican con `SKIP` y terminan sin errores.
 
@@ -222,7 +222,6 @@ el filtro, con qué texto y el error si falló al abrirse).
 
 Distinción rápida según lo que muestre la lista:
 
-- `Buscando acciones…` → el picker está esperando la respuesta.
 - `No matching actions` con el filtro vacío → el servidor no devolvió nada.
 - `No matching actions` con texto en el filtro → el filtro lo descarta todo
   (`<C-u>` en el prompt lo limpia).

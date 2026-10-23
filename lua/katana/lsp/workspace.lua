@@ -220,9 +220,15 @@ function M.apply_to_lines(lines, edits, encoding)
     local start_col = M.char_to_byte(start_text, start.character or 0, encoding)
     local stop_col = M.char_to_byte(stop_text, stop.character or 0, encoding)
 
-    local replacement = vim.split(edit.newText or "", "\n", { plain = true })
+    -- Se sustituye sólo el tramo [start_col, stop_col): el prefijo de la línea
+    -- inicial y el sufijo de la final se conservan. Reemplazar líneas completas
+    -- producía previews falsos en ediciones intra-línea (p. ej. insertar `;`).
+    local replacement = vim.split(
+      start_text:sub(1, start_col) .. (edit.newText or "") .. stop_text:sub(stop_col + 1),
+      "\n",
+      { plain = true }
+    )
 
-    -- Sustituye las líneas [start_line, stop_line] (0-based) por `replacement`.
     local head = vim.list_slice(result, 1, start_line)
     local tail = vim.list_slice(result, stop_line + 2, #result)
     result = vim.list_extend(vim.list_extend(head, replacement), tail)

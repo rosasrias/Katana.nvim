@@ -200,6 +200,101 @@ report.check("byte_to_char (utf-8 = bytes)", workspace.byte_to_char(emoji, 2, "u
 report.check("char_to_byte ida y vuelta", workspace.char_to_byte(emoji, 3, "utf-16") == 5)
 report.check("char_to_byte (inicio del astral)", workspace.char_to_byte(emoji, 1, "utf-16") == 1)
 
+-- Preview: `apply_to_lines` debe reemplazar sólo el tramo del `TextEdit`, no la
+-- línea completa. Es el caso de clangd insertando un `;` al final de la línea.
+local insert_eol = workspace.apply_to_lines(
+  { "  int x = 1", "  return 0" },
+  {
+    {
+      range = {
+        start = { line = 0, character = 11 },
+        ["end"] = { line = 0, character = 11 },
+      },
+      newText = ";",
+    },
+  },
+  "utf-16"
+)
+report.check(
+  "preview: inserción al final de línea conserva el texto",
+  insert_eol[1] == "  int x = 1;" and insert_eol[2] == "  return 0",
+  vim.inspect(insert_eol)
+)
+
+local replace_inline = workspace.apply_to_lines(
+  { "  int x = 1" },
+  {
+    {
+      range = {
+        start = { line = 0, character = 2 },
+        ["end"] = { line = 0, character = 5 },
+      },
+      newText = "long",
+    },
+  },
+  "utf-16"
+)
+report.check(
+  "preview: sustitución intra-línea conserva prefijo y sufijo",
+  replace_inline[1] == "  long x = 1",
+  vim.inspect(replace_inline)
+)
+
+local multiline = workspace.apply_to_lines(
+  { "line1", "line2", "line3" },
+  {
+    {
+      range = {
+        start = { line = 0, character = 2 },
+        ["end"] = { line = 1, character = 2 },
+      },
+      newText = "X\nY",
+    },
+  },
+  "utf-8"
+)
+report.check(
+  "preview: edición multi-línea conserva los extremos",
+  table.concat(multiline, "|") == "liX|Yne2|line3",
+  vim.inspect(multiline)
+)
+
+local multi_edits = workspace.apply_to_lines(
+  { "a", "b" },
+  {
+    {
+      range = {
+        start = { line = 1, character = 1 },
+        ["end"] = { line = 1, character = 1 },
+      },
+      newText = "!",
+    },
+    {
+      range = {
+        start = { line = 0, character = 1 },
+        ["end"] = { line = 0, character = 1 },
+      },
+      newText = "?",
+    },
+  },
+  "utf-8"
+)
+report.check(
+  "preview: varias ediciones se aplican de abajo arriba",
+  table.concat(multi_edits, "|") == "a?|b!",
+  vim.inspect(multi_edits)
+)
+
+-- Las cabeceras usan el label del grupo (no el del primer subkind que aparezca).
+local groups = require("katana.core.group").build({
+  { title = "Fix all", kind = "source.fixAll.eslint", source = "lsp:eslint" },
+})
+report.check(
+  "cabecera de subkind usa el label del grupo",
+  groups[1] and groups[1].label == "Source: Fix All",
+  groups[1] and groups[1].label
+)
+
 local action = {
   title = "Replace",
   kind = "quickfix",
