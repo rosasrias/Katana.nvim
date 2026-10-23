@@ -178,11 +178,20 @@ function M.setup_list()
   if config.options.num_shortcuts then
     for i = 1, 9 do
       vim.keymap.set("n", tostring(i), function()
-        jump_to_action(i)
-        apply.run_current()
+        M.select(i)
       end, opts)
     end
   end
+end
+
+--- Selecciona y ejecuta la acción con el atajo numérico dado.
+---@param n integer
+function M.select(n)
+  if not state.open then
+    return
+  end
+  jump_to_action(n)
+  apply.run_current()
 end
 
 --- Registra los keymaps del buffer del prompt.

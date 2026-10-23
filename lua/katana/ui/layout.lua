@@ -29,28 +29,66 @@ function M.compute()
   local total_height = math.max(6, math.floor(vim.o.lines * (opts.height or 0.7)))
   total_height = math.min(total_height, vim.o.lines - 4)
 
-  -- Ancho útil: se descuentan los bordes de las dos ventanas (2 columnas cada una)
-  -- y la columna separadora.
-  local content = total_width - 5
+  local split = opts.preview_split == "horizontal" and "horizontal" or "vertical"
+  local left = math.max(0, math.floor((vim.o.columns - total_width) / 2))
+  local top = math.max(1, math.floor((vim.o.lines - total_height) / 2))
 
+  if split == "horizontal" then
+    -- Distribución vertical: prompt arriba, lista arriba/centro, preview abajo.
+    local content_height = total_height - 5 -- descontar bordes + prompt
+    local preview_height = 0
+    if opts.preview and total_height >= 16 then
+      preview_height = math.floor(content_height * 0.4)
+    end
+    local list_height = math.max(3, content_height - preview_height)
+
+    local list_width = total_width - 2 -- bordes laterales
+    local prompt_width = list_width
+
+    return {
+      list_width = list_width - 2,
+      list_height = list_height,
+      preview_width = list_width,
+      preview_height = preview_height,
+      left = left,
+      top = top,
+      border = opts.border,
+      list = {
+        row = top,
+        col = left,
+        width = list_width,
+        height = list_height,
+      },
+      prompt = {
+        row = top - 1,
+        col = left + 1,
+        width = prompt_width - 2,
+        height = 1,
+      },
+      preview = {
+        row = top + list_height + 2,
+        col = left,
+        width = list_width,
+        height = preview_height,
+      },
+    }
+  end
+
+  -- Vertical (por defecto): lista | preview
+  local content = total_width - 5
   local preview_width = 0
   if opts.preview and total_width >= 60 then
     preview_width = math.floor(content * 0.45)
   end
 
   local list_width = math.max(20, content - preview_width)
-
-  -- Alto de la lista: se reserva 1 fila para el prompt y 2 para los bordes.
   local list_height = math.max(1, total_height - 3)
-
-  local left = math.max(0, math.floor((vim.o.columns - total_width) / 2))
-  -- El prompt vive una fila por encima del borde superior de la lista.
-  local top = math.max(1, math.floor((vim.o.lines - total_height) / 2))
 
   return {
     list_width = list_width,
     list_height = list_height,
     preview_width = preview_width,
+    preview_height = list_height,
     left = left,
     top = top,
     border = opts.border,

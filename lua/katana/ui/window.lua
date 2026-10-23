@@ -156,7 +156,7 @@ function M.open(actions, on_select)
       row = geometry.preview.row,
       col = geometry.preview.col,
       width = geometry.preview.width,
-      height = geometry.preview.height,
+      height = geometry.preview.height or geometry.list_height,
       style = "minimal",
       border = geometry.border,
       title = " Preview ",
