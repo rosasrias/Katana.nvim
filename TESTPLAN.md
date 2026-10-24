@@ -15,12 +15,13 @@ El plugin ya está registrado en la configuración de lazy.nvim
 {
   dir = "C:/Users/rosas/Documents/code/plugins/Katana.nvim",
   name = "katana.nvim",
-  dependencies = { "NvChad/volt" },
   config = function()
     require("katana").setup({})
   end,
 }
 ```
+
+La UI es nativa: no requiere Volt ni ningún otro plugin de interfaz.
 
 > **Choque de mapping**: si tu spec ya define `<leader>ca` (o `<leader>cA`),
 > Katana **no** lo pisa: `require("katana").setup()` comprueba `maparg` antes de
@@ -31,13 +32,15 @@ Comprobación previa (sin GUI):
 ```bash
 cd C:/Users/rosas/Documents/code/plugins/Katana.nvim
 nvim --headless -u NONE -l scripts/smoke.lua
+nvim --headless -u NONE -l scripts/lsp_conformance.lua
 nvim --headless -u NONE -l scripts/ui.lua
+nvim --headless -u NONE -l scripts/icons.lua
 nvim --headless -u NONE -l scripts/e2e.lua
 ```
 
-Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 46 + 12
-comprobaciones). Si `Volt` o `clangd` no están disponibles, los scripts lo
-indican con `SKIP` y terminan sin errores.
+Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 11 + 47 +
+8 + 12 comprobaciones). Si `clangd` no está disponible, `e2e.lua` lo indica con
+`SKIP` y termina sin errores.
 
 ---
 

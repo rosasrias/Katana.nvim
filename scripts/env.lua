@@ -5,36 +5,6 @@
 
 local M = {}
 
---- Añade Volt al `runtimepath` si está disponible.
----@return boolean
-function M.ensure_volt()
-  if pcall(require, "volt") then
-    return true
-  end
-
-  local candidates = {}
-
-  if vim.env.KATANA_VOLT then
-    candidates[#candidates + 1] = vim.env.KATANA_VOLT
-  end
-
-  local data = vim.fn.stdpath("data")
-  candidates[#candidates + 1] = data .. "/lazy/volt"
-  candidates[#candidates + 1] = data .. "/site/pack/packer/start/volt"
-  candidates[#candidates + 1] = data .. "/site/pack/vendor/start/volt"
-
-  for _, path in ipairs(candidates) do
-    if vim.fn.isdirectory(path) == 1 then
-      vim.opt.rtp:append(path)
-      if pcall(require, "volt") then
-        return true
-      end
-    end
-  end
-
-  return false
-end
-
 --- Localiza el ejecutable de clangd.
 ---@return string|nil
 function M.find_clangd()

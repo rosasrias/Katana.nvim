@@ -149,7 +149,6 @@ function M.setup()
   hl(state.ns_main, "KatanaRow", {
     bg = sel_bg,
     fg = c.white,
-    bold = true,
   })
   -- Barra izquierda de la fila activa: da la señal visual aunque el fondo del
   -- tema sea poco contrastado.
@@ -161,7 +160,6 @@ function M.setup()
   hl(state.ns_main, "KatanaSelectedText", {
     bg = sel_bg,
     fg = c.white,
-    bold = true,
   })
   hl(state.ns_main, "KatanaSelectedNum", {
     bg = sel_bg,
@@ -187,6 +185,21 @@ function M.setup()
   hl(state.ns_main, "KatanaTitle", { fg = c.fg })
   hl(state.ns_main, "KatanaPreferred", { fg = c.yellow, bold = true })
   hl(state.ns_main, "KatanaDisabled", { fg = c.grey_fg2, strikethrough = true })
+
+  -- Fondo del panel y borde: se aplican con `winhl`, de modo que las tres
+  -- ventanas del picker comparten el mismo aspecto aunque el tema no defina
+  -- `NormalFloat`/`FloatBorder`.
+  hl(0, "KatanaNormal", { link = "NormalFloat" })
+  hl(0, "KatanaBorder", { link = "FloatBorder" })
+
+  -- Tramos entre backticks del título ("`rock_name`"): el acento que en la
+  -- referencia distingue identificadores dentro del texto.
+  hl(state.ns_main, "KatanaCode", { fg = c.magenta, italic = true })
+  hl(state.ns_main, "KatanaSelectedCode", { fg = c.magenta, bg = sel_bg, italic = true })
+
+  -- Marcador de variantes (`►`), filas vacías y mensajes.
+  hl(state.ns_main, "KatanaArrow", { fg = c.grey_fg })
+  hl(state.ns_main, "KatanaEmpty", { fg = c.grey_fg, italic = true })
 
   -- Un color por kind: es lo que da color propio a cada icono. Se eligen colores
   -- distintos dentro de cada familia (extra/inline/rewrite/convert no comparten
@@ -251,10 +264,10 @@ function M.setup()
     end
   end
 
-  -- Volt pinta dentro de `ns_main`, y los grupos de un namespace **no** ven los
-  -- definidos en otro (los `MiniIcons*` globales viven en el namespace 0). Por
-  -- eso se replican aquí: la fila sin seleccionar referencia el grupo base, y la
-  -- seleccionada su variante `Sel`, y ambos tienen que resolver en `ns_main`.
+  -- La lista pinta con extmarks en `ns_main`, y los grupos de un namespace no
+  -- ven los definidos en otro (los `MiniIcons*` globales viven en el namespace
+  -- 0). Por eso se replican aquí: la fila sin seleccionar referencia el grupo
+  -- base, y la seleccionada su variante `Sel`, y ambos resuelven en `ns_main`.
   for name, _ in pairs(icons.color_fallbacks) do
     local fg = effective_fg(name)
     if fg then

@@ -9,7 +9,7 @@
 ---      ┌ prompt (1 fila, sin borde) ──────────────┐
 ---      │  > filtro en vivo                         │
 ---      ├──────────────────────────────────────────┤
----      │  lista de acciones (Volt)      │ preview  │
+---      │  lista de acciones             │ preview  │
 ---      │                                │  diff    │
 ---      └────────────────────────────────┴─────────┘
 --- ```
@@ -17,6 +17,35 @@
 local config = require("katana.config")
 
 local M = {}
+
+--- Ancho de contenido que necesita la lista para no truncar los títulos.
+---
+--- Se calcula a partir de las acciones ya recogidas (antes de dibujar). Devuelve
+--- `nil` cuando `auto_width` está desactivado.
+---@return integer|nil
+function M.needed_list_width()
+  if not config.options.auto_width then
+    return nil
+  end
+
+  local state = require("katana.state")
+  local utils = require("katana.utils")
+  local opts = config.options
+
+  local needed = 0
+  for _, action in ipairs(state.actions or {}) do
+    -- barra + número + icono + espacios
+    local w = 6 + vim.fn.strdisplaywidth(utils.compact_title(action.title) or "")
+    if opts.show_server_name and action.source and action.source ~= "" then
+      w = w + 2 + vim.fn.strdisplaywidth(action.source)
+    end
+    if w > needed then
+      needed = w
+    end
+  end
+
+  return needed > 0 and needed or nil
+end
 
 --- Calcula la geometría de las ventanas del picker.
 ---@return table
@@ -82,6 +111,19 @@ function M.compute()
   end
 
   local list_width = math.max(20, content - preview_width)
+
+  -- Con `auto_width`, la lista se ajusta a su contenido y el espacio sobrante
+  -- pasa al preview (aspecto compacto, como el menú nativo de code actions).
+  local needed = M.needed_list_width()
+  if needed and preview_width > 0 then
+    local wanted = math.min(needed + 2, math.floor((vim.o.columns - 2) * 0.6))
+    if wanted >= 24 and wanted < list_width then
+      local delta = list_width - wanted
+      list_width = wanted
+      preview_width = preview_width + delta
+    end
+  end
+
   local list_height = math.max(1, total_height - 3)
 
   return {

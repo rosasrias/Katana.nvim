@@ -1,10 +1,9 @@
--- Prueba de la UI del picker de Katana (Volt): ventanas, render, agrupación,
+-- Prueba de la UI nativa del picker de Katana: ventanas, render, agrupación,
 -- filtro en vivo, preview reactivo, confirmación y undo agrupado.
 --
 --   nvim --headless -u NONE -l scripts/ui.lua
 --
--- Requiere el plugin Volt. Se busca en el `runtimepath` y, si no está, en las
--- rutas habituales de lazy.nvim. Se puede forzar con `KATANA_VOLT=/ruta`.
+-- No requiere Volt: la lista se dibuja con texto real y extmarks nativos.
 
 local script = debug.getinfo(1, "S").source:sub(2)
 local dir = vim.fn.fnamemodify(script, ":p:h")
@@ -16,12 +15,6 @@ local env = dofile(dir .. "/env.lua")
 local report = env.reporter()
 
 report.header("Katana.nvim · UI test")
-
-if not env.ensure_volt() then
-  report.skip("Volt no está disponible (define KATANA_VOLT con la ruta del plugin)")
-  report.finish()
-  return
-end
 
 local katana = require("katana")
 katana.setup({ ts = { enabled = false }, resolve_on_open = false })
@@ -77,20 +70,11 @@ report.check("buffer de prompt creado", state.buf_prompt ~= nil and vim.api.nvim
 report.check("prompt en modo prompt", vim.bo[state.buf_prompt].buftype == "prompt", vim.bo[state.buf_prompt].buftype)
 report.check("prompt enfocado", vim.api.nvim_get_current_win() == state.win_prompt)
 report.check("buffer de preview creado", state.buf_preview ~= nil and vim.api.nvim_buf_is_valid(state.buf_preview))
+report.check("métrica de apertura registrada (ms)", type(state.last.open_ms) == "number", state.last.open_ms)
 
---- Texto renderizado por Volt en cada fila.
+--- Texto renderizado en cada fila (ahora es texto real del buffer).
 local function rows_text()
-  local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, state.ns_main, 0, -1, { details = true })
-  local rows = {}
-  for _, m in ipairs(marks) do
-    local chunks = m[4] and m[4].virt_text or {}
-    local text = {}
-    for _, chunk in ipairs(chunks) do
-      text[#text + 1] = chunk[1]
-    end
-    rows[m[2] + 1] = table.concat(text)
-  end
-  return rows
+  return vim.api.nvim_buf_get_lines(state.buf_main, 0, -1, false)
 end
 
 local function rows_contain(needle)
@@ -109,23 +93,20 @@ report.check("icono + título en la acción", (rows[2] or ""):find("Fix typo") ~
 report.check("origen visible", (rows[2] or ""):find("lsp:lua_ls") ~= nil, rows[2])
 report.check("agrupación: 4 acciones + 4 cabeceras", #state.flat == 8, #state.flat)
 
---- Aspecto: barra de selección, colores por kind y regla de las cabeceras.
----@return table[] marcas de la fila `row` (1-based)
-local function row_marks(row)
+--- Grupos de resaltado presentes en una fila (extmarks nativos).
+local function row_hls(row)
   local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, state.ns_main, 0, -1, { details = true })
+  local names = {}
   for _, m in ipairs(marks) do
     if m[2] + 1 == row then
-      return m[4] and m[4].virt_text or {}
+      local details = m[4] or {}
+      if details.hl_group then
+        names[#names + 1] = details.hl_group
+      end
+      if details.line_hl_group then
+        names[#names + 1] = details.line_hl_group
+      end
     end
-  end
-  return {}
-end
-
---- Grupos de resaltado presentes en una fila.
-local function row_hls(row)
-  local names = {}
-  for _, chunk in ipairs(row_marks(row)) do
-    names[#names + 1] = chunk[2]
   end
   return names
 end

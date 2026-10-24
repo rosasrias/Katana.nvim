@@ -35,6 +35,9 @@ M.defaults = {
   preview_split = "vertical",
   width = 0.85,
   height = 0.85,
+  -- Ajusta el ancho de la lista al contenido (títulos + origen) y cede el
+  -- espacio sobrante al preview. Da el aspecto compacto del menú nativo.
+  auto_width = true,
   prompt = " > ",
   show_server_name = true,
   show_preferred = true,
@@ -107,6 +110,11 @@ M.defaults = {
     preferred = "★",
   },
   border = "rounded",
+  -- Título de la ventana del picker. Vacío = sin título (aspecto compacto, como
+  -- el menú nativo de code actions).
+  title = "",
+  -- Título del panel de previsualización. Vacío = sin título.
+  preview_title = "",
   hide_disabled = false,
 
   -- Prioridad de los kinds (índice 0 = máxima). Los kinds no listados quedan al

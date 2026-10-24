@@ -175,6 +175,26 @@ function M.setup_list()
     end
   end, opts)
 
+  -- Ratón: un clic selecciona la fila, doble clic la ejecuta.
+  vim.keymap.set("n", "<LeftMouse>", function()
+    local mouse = vim.fn.getmousepos()
+    if mouse.winid ~= state.win_main then
+      return
+    end
+    if list.select_row(mouse.line) and config.options.auto_preview then
+      preview.update()
+    end
+  end, opts)
+  vim.keymap.set("n", "<2-LeftMouse>", function()
+    local mouse = vim.fn.getmousepos()
+    if mouse.winid ~= state.win_main then
+      return
+    end
+    if list.select_row(mouse.line) then
+      require("katana.ui.window").confirm()
+    end
+  end, opts)
+
   if config.options.num_shortcuts then
     for i = 1, 9 do
       vim.keymap.set("n", tostring(i), function()
