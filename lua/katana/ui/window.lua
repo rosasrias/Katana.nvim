@@ -84,6 +84,14 @@ function M.open(actions, on_select)
 
   highlights.setup()
 
+  -- La lista no necesita cursor visible: la fila activa ya se marca en azul.
+  -- `guicursor` es global, así que se guarda el valor del usuario y se restaura
+  -- al cerrar el picker.
+  state.guicursor_prev = vim.o.guicursor
+  pcall(function()
+    vim.o.guicursor = "a:block-KatanaCursor"
+  end)
+
   ------------------------------------------------------------------- lista
   local list_buf = api.nvim_create_buf(false, true)
   vim.bo[list_buf].buftype = "nofile"
@@ -260,6 +268,13 @@ function M.close()
   -- Devuelve el foco a la ventana de origen.
   if state.origin_win and api.nvim_win_is_valid(state.origin_win) then
     pcall(api.nvim_set_current_win, state.origin_win)
+  end
+
+  if state.guicursor_prev then
+    pcall(function()
+      vim.o.guicursor = state.guicursor_prev
+    end)
+    state.guicursor_prev = nil
   end
 
   state.reset()

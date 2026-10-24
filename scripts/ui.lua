@@ -64,6 +64,8 @@ local actions = {
   make_action("Provider action", "source", "provider:mi"),
 }
 
+local gcr_before = vim.o.guicursor
+
 local selected = nil
 window.open(actions, function(action)
   selected = action
@@ -76,6 +78,17 @@ report.check("buffer de lista creado", state.buf_main ~= nil and vim.api.nvim_bu
 report.check("lista enfocada", vim.api.nvim_get_current_win() == state.win_main)
 report.check("sin ventana de filtro", state.win_prompt == nil and state.buf_prompt == nil)
 report.check("buffer de preview creado", state.buf_preview ~= nil and vim.api.nvim_buf_is_valid(state.buf_preview))
+
+--- Sin cursor visible en la lista: `guicursor` apunta a un grupo con el fondo
+--- de la fila activa, así no queda una raya gris junto al número.
+report.check("cursor oculto en la lista", vim.o.guicursor:find("KatanaCursor") ~= nil, vim.o.guicursor)
+local cursor_hl = vim.api.nvim_get_hl(0, { name = "KatanaCursor", link = false })
+local row_hl = vim.api.nvim_get_hl(state.ns_main, { name = "KatanaRow", link = false })
+report.check(
+  "el cursor usa el fondo de la fila activa",
+  cursor_hl.bg ~= nil and cursor_hl.bg == row_hl.bg,
+  string.format("cursor=%s fila=%s", tostring(cursor_hl.bg), tostring(row_hl.bg))
+)
 
 --- Texto renderizado por Volt en cada fila.
 local function rows_text()
@@ -322,6 +335,7 @@ local after = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 report.check("edit aplicado en el buffer", after[1] == "UNO", vim.inspect(after))
 report.check("foco devuelto al buffer original", vim.api.nvim_get_current_buf() == bufnr)
 report.check("ventanas cerradas", #vim.api.nvim_list_wins() == 1, #vim.api.nvim_list_wins())
+report.check("guicursor restaurado al cerrar", vim.o.guicursor == gcr_before, vim.o.guicursor)
 
 vim.cmd("undo")
 report.check("un solo `u` revierte la acción", vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)[1] == "uno")

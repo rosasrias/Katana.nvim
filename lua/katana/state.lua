@@ -56,6 +56,10 @@ M.open = false
 ---@type integer|nil
 M.au_close = nil
 
+--- Valor de `guicursor` antes de abrir el picker (se restaura al cerrar).
+---@type string|nil
+M.guicursor_prev = nil
+
 --- Último estado conocido del picker, para `:KatanaDebug`.
 ---
 --- Sobrevive a `reset()`: cuando algo va mal en la fase del picker conviene saber
@@ -113,6 +117,7 @@ function M.reset()
   M.index = 1
   M.on_select = nil
   M.open = false
+  M.guicursor_prev = nil
 end
 
 return M

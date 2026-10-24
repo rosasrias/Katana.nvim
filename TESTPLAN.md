@@ -386,6 +386,7 @@ llevaba la lista `diagnostics` ausente.
 - [ ] La lista nunca dice *No matching actions* si el servidor devolvió acciones
 - [ ] Si algo falla al abrir el picker, sale un error en vez de quedarse en *No matching actions*
 - [ ] La fila seleccionada tiene fondo propio y el texto en azul (sin barra `▎`), y se distingue del fondo de la flotante
+- [ ] Dentro del picker no se ve el cursor (ni raya ni bloque), y al cerrarlo vuelve la forma configurada
 - [ ] El icono conserva su color por kind también en la fila seleccionada
 - [ ] Cada kind tiene un icono y un color distintos (sin glifos duplicados)
 - [ ] Las cabeceras de grupo muestran su regla horizontal y su icono coloreado

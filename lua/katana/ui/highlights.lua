@@ -151,6 +151,11 @@ function M.setup()
     fg = c.white,
     bold = true,
   })
+  -- Cursor de la lista: en el TUI el color del cursor sale del fondo del grupo,
+  -- así que con el mismo fondo que la fila activa queda invisible (no hay raya
+  -- gris a la izquierda del número). Debe ser global: `guicursor` lo resuelve
+  -- fuera del namespace del picker.
+  vim.api.nvim_set_hl(0, "KatanaCursor", { bg = sel_bg, fg = sel_bg })
   hl(state.ns_main, "KatanaSelectedText", {
     bg = sel_bg,
     fg = accent,

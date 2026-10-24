@@ -45,6 +45,9 @@ de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
   tema y, si queda demasiado cerca del fondo de la flotante, se separa
   automáticamente. Se puede fijar con `selection_color` (fondo) y
   `selection_accent` (azul del texto seleccionado).
+- El **cursor no se dibuja** dentro del picker (se usa un `guicursor` con el
+  fondo de la fila activa y se restaura al cerrar), para que no aparezca una
+  raya junto al número. La posición se sigue con el texto azul.
 - Las **cabeceras de grupo** van en azul con una regla horizontal que rellena el
   ancho de la lista.
 
