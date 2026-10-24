@@ -139,6 +139,15 @@ function M.collect(opts)
     tostring(last.flat)
   )
 
+  -- Latencia real: recogida (peticiones LSP incluidas) y render del picker.
+  if last.fetch_ms or last.open_ms then
+    add(
+      "    latencia: recogida=%s  apertura=%s",
+      last.fetch_ms and string.format("%.1f ms", last.fetch_ms) or "n/a",
+      last.open_ms and string.format("%.1f ms", last.open_ms) or "n/a"
+    )
+  end
+
   if last.error then
     add("    error: %s", tostring(last.error))
   end

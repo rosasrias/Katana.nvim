@@ -34,7 +34,9 @@ function M.setup(opts)
     require("katana.plugin").ensure()
   end)
   if not ok_plugin then
-    vim.notify("Katana: fallo al crear comandos/atajos: " .. tostring(err_plugin), vim.log.levels.WARN)
+    pcall(function()
+      vim.notify("Katana: fallo al crear comandos/atajos: " .. tostring(err_plugin), vim.log.levels.WARN)
+    end)
   end
 
   return options
@@ -84,10 +86,14 @@ end
 ---   - `kind` string|nil
 ---   - `source` string|nil
 ---   - `run` fun()|nil
+---   - `execute_fn` fun(action: KatanaAction)|nil
+---   - `edit` vim.lsp.WorkspaceEdit|nil
+---   - `command` table|string|nil
 ---   - `when` fun(ctx: KatanaContext): boolean|nil
+---@param opts table|nil
 ---@return table
-function M.register_action(spec)
-  return require("katana.register").register(spec)
+function M.register_action(spec, opts)
+  return require("katana.register").register(spec, opts)
 end
 
 --- Registra un proveedor de acciones.
@@ -96,9 +102,10 @@ end
 --- acciones normalizadas.
 ---@param fn fun(ctx: KatanaContext): KatanaAction[]|nil
 ---@param name string|nil
+---@param opts table|nil
 ---@return table
-function M.register_provider(fn, name)
-  return require("katana.core.providers").register(fn, name)
+function M.register_provider(fn, name, opts)
+  return require("katana.core.providers").register(fn, name, opts)
 end
 
 --- Cierra el picker si está abierto.

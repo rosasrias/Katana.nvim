@@ -63,6 +63,34 @@ local function find_client(action, bufnr)
   return clients[1]
 end
 
+--- Valida un `WorkspaceEdit` antes de aplicarlo.
+---@param edit vim.lsp.WorkspaceEdit|nil
+---@return boolean ok
+---@return string|nil error
+function M.validate_edit(edit)
+  if type(edit) ~= "table" then
+    return true
+  end
+
+  local groups = workspace.collect_edits(edit)
+  if type(groups) ~= "table" or #groups == 0 then
+    return false, "el WorkspaceEdit no contiene cambios aplicables"
+  end
+
+  for _, group in ipairs(groups) do
+    if type(group.edits) ~= "table" or #group.edits == 0 then
+      return false, "el WorkspaceEdit contiene un grupo sin ediciones"
+    end
+    for _, e in ipairs(group.edits) do
+      if type(e) ~= "table" or not e.range then
+        return false, "edición sin rango en WorkspaceEdit"
+      end
+    end
+  end
+
+  return true
+end
+
 --- Aplica el `WorkspaceEdit` de una acción.
 ---@param action KatanaAction
 ---@param opts KatanaExecutorOptions
@@ -74,35 +102,38 @@ function M.apply_edit(action, opts)
     return true
   end
 
+  local v_ok, v_err = M.validate_edit(edit)
+  if not v_ok then
+    return false, v_err
+  end
+
   local encoding = action.encoding or "utf-16"
   local groups = workspace.collect_edits(edit)
-  local applied = 0
+  local applied_groups = {}
 
   for _, group in ipairs(groups) do
     local target = workspace.resolve_buf(group, opts.bufnr)
-    if target then
-      if vim.fn.bufloaded(target) == 0 then
-        -- Carga el buffer antes de aplicar para no omitir archivos no cargados.
-        pcall(vim.fn.bufload, target)
-      end
-
-      if vim.fn.bufloaded(target) == 1 and vim.api.nvim_buf_is_valid(target) then
-        -- Cierra el bloque de undo previo para que la acción se deshaga sola.
-        workspace.close_undo_block(target)
-        local ok_apply, err_apply = pcall(workspace.apply_edits_to_buffer, target, group.edits, encoding)
-        if not ok_apply then
-          return false, string.format("error al aplicar cambios en %s: %s", vim.api.nvim_buf_get_name(target), tostring(err_apply))
-        end
-        applied = applied + 1
-      else
-        return false, string.format("no se pudo cargar el buffer para aplicar cambios en %s", vim.api.nvim_buf_get_name(target))
-      end
-    else
-      return false, "no se pudo resolver el buffer destino del WorkspaceEdit"
+    if not target then
+      return false, string.format("no se pudo resolver el buffer destino del WorkspaceEdit (%s)", group.filename or group.uri or "?")
     end
+
+    if vim.fn.bufloaded(target) == 0 then
+      pcall(vim.fn.bufload, target)
+    end
+
+    if vim.fn.bufloaded(target) ~= 1 or not vim.api.nvim_buf_is_valid(target) then
+      return false, string.format("no se pudo cargar el buffer para aplicar cambios en %s", vim.api.nvim_buf_get_name(target))
+    end
+
+    workspace.close_undo_block(target)
+    local ok_apply, err_apply = pcall(workspace.apply_edits_to_buffer, target, group.edits, encoding)
+    if not ok_apply then
+      return false, string.format("error al aplicar cambios en %s: %s", vim.api.nvim_buf_get_name(target), tostring(err_apply))
+    end
+    table.insert(applied_groups, { bufnr = target, filename = group.filename })
   end
 
-  if applied == 0 then
+  if #applied_groups == 0 then
     return false, "el WorkspaceEdit no contiene cambios aplicables"
   end
 

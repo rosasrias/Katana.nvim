@@ -169,10 +169,70 @@ function M.sort(actions, ctx)
   return sorted
 end
 
---- Elimina duplicados por `title` + `kind`, fusionando los orígenes.
+--- Firma del contenido ejecutable de una acción.
+---
+--- Dos acciones con el mismo título y kind pero con distinto `edit`, `command`,
+--- `resolve_fn` o `execute_fn` **no** son equivalentes: aplicarlas tiene efectos
+--- distintos. La deduplicación usa esta firma para no descartar ninguna.
+---
+--- Para payloads grandes (un `WorkspaceEdit` completo) se usa el hash del
+--- serializado, no el texto, para que la clave no crezca sin límite.
+---@param action KatanaAction
+---@return string
+function M.action_signature(action)
+  if not action then
+    return "nil"
+  end
+
+  local parts = {}
+
+  if type(action.edit) == "table" then
+    local ok, encoded = pcall(vim.json.encode, action.edit)
+    parts[#parts + 1] = "edit:" .. (ok and encoded or tostring(action.edit))
+  end
+
+  if type(action.command) == "string" then
+    parts[#parts + 1] = "cmd:" .. action.command
+  elseif type(action.command) == "table" then
+    local ok, encoded = pcall(vim.json.encode, action.command)
+    parts[#parts + 1] = "cmd:" .. (ok and encoded or tostring(action.command.command))
+  end
+
+  if action.resolve_fn then
+    parts[#parts + 1] = "resolve:" .. tostring(action.resolve_fn)
+  end
+  if action.execute_fn then
+    parts[#parts + 1] = "exec:" .. tostring(action.execute_fn)
+  end
+  if action.id ~= nil then
+    parts[#parts + 1] = "id:" .. tostring(action.id)
+  end
+  if action.disabled then
+    parts[#parts + 1] = "disabled"
+  end
+
+  if #parts == 0 then
+    return "noop"
+  end
+
+  local payload = table.concat(parts, "|")
+
+  -- El payload puede ser enorme (un WorkspaceEdit completo). Se resume a un
+  -- hash corto: la firma sólo tiene que distinguir acciones, no ser reversible.
+  local ok_hash, hash = pcall(vim.fn.sha256, payload)
+  if ok_hash and type(hash) == "string" and hash ~= "" then
+    return hash:sub(1, 16)
+  end
+
+  return tostring(#payload) .. ":" .. payload:sub(1, 64)
+end
+
+--- Elimina duplicados sólo cuando `title`, `kind` y el payload son equivalentes.
 ---
 --- La acción conservada es la primera encontrada (ya ordenada por prioridad) y
---- acumula en `sources` todos los orígenes que la generaron.
+--- acumula en `sources` todos los orígenes que la generaron. Si el payload
+--- difiere, ambas acciones se conservan como filas independientes: descartar una
+--- cambiaría el resultado de aplicar la acción.
 ---@param actions KatanaAction[]
 ---@return KatanaAction[]
 function M.dedupe(actions)
@@ -180,7 +240,13 @@ function M.dedupe(actions)
   local result = {}
 
   for _, action in ipairs(actions or {}) do
-    local key = (action.title or "") .. "\0" .. (action.kind or "")
+    local signature = M.action_signature(action)
+    local key = table.concat({
+      action.title or "",
+      action.kind or "",
+      signature,
+    }, "\0")
+
     local previous = seen[key]
 
     if previous then
@@ -194,8 +260,12 @@ function M.dedupe(actions)
       if not previous.diagnostics and action.diagnostics then
         previous.diagnostics = action.diagnostics
       end
+      if not previous.isPreferred and action.isPreferred then
+        previous.isPreferred = action.isPreferred
+      end
     else
       action.sources = { action.source }
+      action._dedupe_sig = signature
       seen[key] = action
       table.insert(result, action)
     end

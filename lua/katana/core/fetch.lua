@@ -898,9 +898,22 @@ function M.get(opts)
   local win = opts.win or vim.api.nvim_get_current_win()
 
   local ctx = M.build_context(bufnr, win, opts)
+  local metrics = require("katana.metrics")
+
+  metrics.start("fetch")
 
   M.get_all_actions(ctx, opts, function(actions)
+    local fetch_ms = metrics.stop("fetch")
+
     require("katana")._on_actions(actions, opts, ctx)
+
+    -- Se guarda después de `_on_actions` porque `state.snapshot()` reemplaza
+    -- `state.last`; así la métrica sobrevive para `:KatanaDebug`.
+    if fetch_ms then
+      local state = require("katana.state")
+      state.last = state.last or {}
+      state.last.fetch_ms = fetch_ms
+    end
   end)
 end
 

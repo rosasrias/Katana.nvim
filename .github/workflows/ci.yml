@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+
+      - name: Smoke tests (motor + dedupe + codificación + undo)
+        run: nvim --headless -u NONE -l scripts/smoke.lua
+
+      - name: LSP conformance (resolución, WorkspaceEdit, multi-archivo)
+        run: nvim --headless -u NONE -l scripts/lsp_conformance.lua
+
+      - name: UI tests (nativa, sin dependencias)
+        run: nvim --headless -u NONE -l scripts/ui.lua
+
+      - name: Icon and color tests
+        run: nvim --headless -u NONE -l scripts/icons.lua
+
+      - name: End-to-end (clangd; se omite si no está instalado)
+        run: nvim --headless -u NONE -l scripts/e2e.lua
