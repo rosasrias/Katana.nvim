@@ -29,7 +29,7 @@ local M = {}
 ---@field pull_diagnostics boolean Pide los diagnósticos al servidor si el buffer no los tiene
 ---@field pull_timeout integer Milisegundos de espera de la petición de diagnósticos
 ---@field selection_color string|nil Fondo de la fila seleccionada (`nil` = derivarlo del tema)
----@field selection_accent string|nil Barra izquierda de la fila seleccionada (`nil` = derivarla del tema)
+---@field selection_accent string|nil Azul del texto de la fila seleccionada (`nil` = derivarlo del tema)
 
 M.defaults = {
   preview = true,
@@ -174,6 +174,7 @@ M.defaults = {
   -- muchos temas de NvChad, donde `one_bg3` y `one_bg2` son casi iguales), se
   -- puede fijar aquí uno propio.
   selection_color = nil,
+  -- Azul del texto de la fila activa (no hay barra de selección).
   selection_accent = nil,
 }
 

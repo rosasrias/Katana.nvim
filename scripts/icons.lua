@@ -96,7 +96,7 @@ vim.wait(250)
 vim.cmd("stopinsert")
 
 local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, ns, 0, -1, { details = true })
-local header_ok, accent_ok, icon_color_ok = false, false, false
+local header_ok, selected_ok, icon_color_ok = false, false, false
 local action_icon_hl
 
 for _, m in ipairs(marks) do
@@ -117,25 +117,25 @@ for _, m in ipairs(marks) do
     end
   end
 
-  -- El selector debe ser azul (KatanaAccent)
-  if line:match("▎") then
+  -- La selección no usa glifo: el título pasa a azul (KatanaSelectedText).
+  if line:match("Fix") or line:match("Extract") then
     for _, c in ipairs(vt) do
-      if c[1] == "▎" and c[2] == "KatanaAccent" then
-        accent_ok = true
+      if c[2] == "KatanaSelectedText" then
+        selected_ok = true
       end
     end
   end
 end
 
 report.check("cabeceras usan color azul (KatanaHeader/Icon)", header_ok)
-report.check("selector usa KatanaAccent azul", accent_ok)
+report.check("la selección pinta el texto con KatanaSelectedText", selected_ok)
 
 -- Verificación directa de los grupos
-local acc_def = vim.api.nvim_get_hl(ns, { name = "KatanaAccent", link = false })
+local sel_def = vim.api.nvim_get_hl(ns, { name = "KatanaSelectedText", link = false })
 local hdr_def = vim.api.nvim_get_hl(ns, { name = "KatanaHeader", link = false })
 local hdr_icon_def = vim.api.nvim_get_hl(ns, { name = "KatanaHeaderIcon", link = false })
 local sep_def = vim.api.nvim_get_hl(ns, { name = "KatanaSeparator", link = false })
-report.check("KatanaAccent definido", acc_def and acc_def.fg ~= nil)
+report.check("KatanaSelectedText en azul", sel_def and sel_def.fg ~= nil)
 report.check("KatanaHeader definido (azul/bold)", hdr_def and hdr_def.fg ~= nil)
 report.check("KatanaHeaderIcon definido (azul)", hdr_icon_def and hdr_icon_def.fg ~= nil)
 report.check("KatanaSeparator definido", sep_def ~= nil)

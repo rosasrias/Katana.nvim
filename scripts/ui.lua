@@ -108,7 +108,7 @@ report.check("icono + título en la acción", (rows[2] or ""):find("Fix typo") ~
 report.check("origen visible", (rows[2] or ""):find("lsp:lua_ls") ~= nil, rows[2])
 report.check("agrupación: 4 acciones + 4 cabeceras", #state.flat == 8, #state.flat)
 
---- Aspecto: barra de selección, colores por kind y regla de las cabeceras.
+--- Aspecto: selección en azul, colores por kind y regla de las cabeceras.
 ---@return table[] marcas de la fila `row` (1-based)
 local function row_marks(row)
   local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, state.ns_main, 0, -1, { details = true })
@@ -138,19 +138,28 @@ local function has_hl(row, name)
   return false
 end
 
---- Fila de la acción seleccionada (la que lleva la barra).
+--- Fila de la acción seleccionada (la que pinta el texto en azul).
 local function active_row()
   for i = 1, #state.flat do
-    if has_hl(i, "KatanaAccent") then
+    if has_hl(i, "KatanaSelectedText") then
       return i
     end
   end
   return nil
 end
 
+local function row_text(row)
+  local text = {}
+  for _, chunk in ipairs(row_marks(row)) do
+    text[#text + 1] = tostring(chunk[1])
+  end
+  return table.concat(text)
+end
+
 local active = active_row()
-report.check("la fila activa lleva la barra KatanaAccent", active ~= nil, tostring(active))
-report.check("el fondo de la fila activa está en el texto", has_hl(active, "KatanaSelectedText"))
+report.check("la fila activa usa KatanaSelectedText", active ~= nil, tostring(active))
+report.check("la fila activa no lleva selector ▎", not row_text(active):find("▎"), row_text(active))
+report.check("el fondo de la fila activa está en el texto", has_hl(active, "KatanaRow"))
 report.check("la fila activa no es una cabecera", state.flat[state.index].type == "action")
 
 --- El icono conserva su color propio en la fila seleccionada.
@@ -161,6 +170,16 @@ for _, n in ipairs(row_hls(active)) do
   end
 end
 report.check("el icono usa su variante seleccionada", icon_sel ~= nil, tostring(icon_sel))
+
+--- El texto de la fila activa va en azul (no en blanco como el resto).
+local sel_text = vim.api.nvim_get_hl(state.ns_main, { name = "KatanaSelectedText", link = false })
+local title_def = vim.api.nvim_get_hl(state.ns_main, { name = "KatanaTitle", link = false })
+report.check(
+  "el texto de la fila activa es azul",
+  sel_text.fg ~= nil and sel_text.fg ~= title_def.fg,
+  string.format("sel=%s title=%s", tostring(sel_text.fg), tostring(title_def.fg))
+)
+report.check("la fila activa conserva el fondo propio", sel_text.bg ~= nil, tostring(sel_text.bg))
 
 --- Cada kind tiene un color distinto para el icono.
 local hl = require("katana.ui.highlights")
@@ -189,7 +208,7 @@ report.check("la cabecera lleva la regla KatanaSeparator", has_hl(header_row, "K
 local before = active_row()
 require("katana.ui.mappings").move(1)
 local after = active_row()
-report.check("mover la selección mueve la barra", before ~= after, string.format("%s -> %s", tostring(before), tostring(after)))
+report.check("mover la selección mueve el texto azul", before ~= after, string.format("%s -> %s", tostring(before), tostring(after)))
 report.check("el fondo sigue a la fila nueva", has_hl(after, "KatanaSelectedText"))
 require("katana.ui.mappings").move(-1)
 

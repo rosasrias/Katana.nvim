@@ -385,7 +385,7 @@ llevaba la lista `diagnostics` ausente.
 - [ ] `:KatanaDebug` muestra clientes, diagnósticos, rangos, acciones de la petición y el estado del picker
 - [ ] La lista nunca dice *No matching actions* si el servidor devolvió acciones
 - [ ] Si algo falla al abrir el picker, sale un error en vez de quedarse en *No matching actions*
-- [ ] La fila seleccionada tiene fondo propio y barra `▎`, y se distinguen del fondo de la flotante
+- [ ] La fila seleccionada tiene fondo propio y el texto en azul (sin barra `▎`), y se distingue del fondo de la flotante
 - [ ] El icono conserva su color por kind también en la fila seleccionada
 - [ ] Cada kind tiene un icono y un color distintos (sin glifos duplicados)
 - [ ] Las cabeceras de grupo muestran su regla horizontal y su icono coloreado

@@ -111,8 +111,8 @@ function M.rows(limit)
         pref_str = "  " .. ((opts.icons or {}).preferred or "*")
       end
 
-      -- Al seleccionar, cada tramo usa su variante "sobre fila activa": mismo
-      -- color propio (el icono conserva el suyo) pero con el fondo del resaltado.
+      -- Al seleccionar, el texto pasa a azul (`KatanaSelected*`) sobre el fondo
+      -- del resaltado; el icono conserva el color de su kind.
       -- Volt sólo admite `{ texto, hl_group, acciones }`, así que el fondo se
       -- resuelve con grupos de resaltado dedicados, no con opciones por mark.
       local title_hl = "KatanaTitle"
@@ -127,8 +127,11 @@ function M.rows(limit)
       local pref_hl = selected and "KatanaSelectedPreferred" or "KatanaPreferred"
       local gap_hl = selected and "KatanaRow" or "Normal"
 
+      -- La fila activa se distingue por el color del texto (azul) y el fondo;
+      -- no hay barra ni glifo de selector a la izquierda. La sangría de una
+      -- columna mantiene alineadas las acciones con las cabeceras.
       local marks = {
-        { selected and "▎" or " ", selected and "KatanaAccent" or "Normal" },
+        { " ", gap_hl },
         { num_str, num_hl },
         { " ", gap_hl },
         { icon .. " ", hls.selected_hl_for(hl_icon, selected) },
@@ -143,7 +146,7 @@ function M.rows(limit)
       end
 
       -- El fondo de la fila activa sólo se ve hasta el final del texto; se añade
-      -- relleno para que la barra de selección ocupe todo el ancho de la lista.
+      -- relleno para que ocupe todo el ancho de la lista.
       if selected then
         local used = 0
         for _, mark in ipairs(marks) do

@@ -144,32 +144,26 @@ function M.setup()
   local accent = config.options.selection_accent or c.blue
 
   -- Resaltado de la fila seleccionada: se aplica a toda la fila (`KatanaRow`) y
-  -- a los tramos con color propio (`KatanaSelectedText`), de modo que la barra
-  -- activa se distingue aunque el título tenga otro color.
+  -- a los tramos con color propio (`KatanaSelected*`). La señal de selección es
+  -- el **texto en azul** (`selection_accent`), no una barra ni un glifo.
   hl(state.ns_main, "KatanaRow", {
     bg = sel_bg,
     fg = c.white,
     bold = true,
   })
-  -- Barra izquierda de la fila activa: da la señal visual aunque el fondo del
-  -- tema sea poco contrastado.
-  hl(state.ns_main, "KatanaAccent", {
-    fg = accent,
-    bg = sel_bg,
-    bold = true,
-  })
   hl(state.ns_main, "KatanaSelectedText", {
     bg = sel_bg,
-    fg = c.white,
+    fg = accent,
     bold = true,
   })
   hl(state.ns_main, "KatanaSelectedNum", {
     bg = sel_bg,
-    fg = c.grey_fg,
+    fg = accent,
+    bold = true,
   })
   hl(state.ns_main, "KatanaSelectedSource", {
     bg = sel_bg,
-    fg = c.grey_fg,
+    fg = accent,
     italic = true,
   })
   hl(state.ns_main, "KatanaSelectedPreferred", {

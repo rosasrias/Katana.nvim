@@ -17,7 +17,7 @@ de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  󰁨  Quick Fix ─────────────────────────────────────────────────────   │
-│▎1. 󰁨 insert ';'                                         lsp:clangd   │
+│ 1. 󰁨 insert ';'                                         lsp:clangd   │
 │                                                                      │
 │  󰛹  Refactor: Extract ─────────────────────────────────────────────   │
 │ 2. 󰛹 Extract function                                    lsp:clangd   │
@@ -40,11 +40,11 @@ de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
   grupos `Katana*`. El icono conserva ese color **también en la fila seleccionada**. Los
   grupos `MiniIcons*` se replican en el namespace del picker con sus variantes
   `*Sel` para mantener el color sobre la fila activa.
-- La fila activa se marca con **fondo propio + barra izquierda `▎`**, de modo que
-  se distingue aunque el tema no tenga un color de selección contrastado. El
-  fondo se calcula a partir del tema y, si queda demasiado cerca del fondo de la
-  flotante, se separa automáticamente; se puede fijar con `selection_color` y
-  `selection_accent`.
+- La fila activa se marca con **fondo propio y el texto en azul** (`▎` se
+  eliminó: no hay barra ni glifo de selector). El fondo se calcula a partir del
+  tema y, si queda demasiado cerca del fondo de la flotante, se separa
+  automáticamente. Se puede fijar con `selection_color` (fondo) y
+  `selection_accent` (azul del texto seleccionado).
 - Las **cabeceras de grupo** van en azul con una regla horizontal que rellena el
   ancho de la lista.
 
@@ -142,7 +142,7 @@ require("katana").setup({
   -- Aspecto de la fila seleccionada. Por defecto se derivan del tema; fíjalos si
   -- el tema no distingue lo suficiente (mira `selection_color` en `:KatanaDebug`).
   selection_color = nil,       -- fondo de la fila activa, p. ej. "#3a4252"
-  selection_accent = nil,      -- barra izquierda de la fila activa, p. ej. "#61afef"
+  selection_accent = nil,      -- azul del texto de la fila activa, p. ej. "#61afef"
 
   show_server_name = true,     -- muestra el origen de la acción
   show_preferred = true,       -- marca las acciones `isPreferred`

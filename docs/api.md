@@ -50,8 +50,9 @@ una no equivale a aplicar la otra.
 La interfaz se dibuja con [Volt](https://github.com/NvChad/volt). Hay dos
 ventanas: la lista (con alto fijo) y el preview debajo. No hay ventana de
 filtro. Opciones relevantes: `border`, `list_max_height`, `preview_split`
-(`"horizontal"` = preview debajo), `preview_max_height`, `selection_color`,
-`selection_accent`.
+(`"horizontal"` = preview debajo), `preview_max_height`, `selection_color`
+(fondo de la fila activa) y `selection_accent` (azul del texto de esa fila; no
+hay barra de selección).
 
 ## Compatibilidad
 
