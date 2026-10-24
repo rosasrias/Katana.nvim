@@ -153,14 +153,22 @@ function M._on_actions(actions, opts, ctx)
   local win = opts.win or vim.api.nvim_get_current_win()
 
   local window = require("katana.ui.window")
+  local metrics = require("katana.metrics")
 
   -- El picker se abre ahora, con las acciones ya recibidas y ordenadas.
+  metrics.start("picker_open")
   local open_ok, open_err = pcall(window.open, sorted, function(action)
     require("katana.apply").execute(action, {
       bufnr = bufnr,
       win = win,
     })
   end)
+  local open_ms = metrics.stop("picker_open")
+
+  if open_ms then
+    state.last = state.last or {}
+    state.last.open_ms = open_ms
+  end
 
   if not open_ok then
     state.last = state.last or {}

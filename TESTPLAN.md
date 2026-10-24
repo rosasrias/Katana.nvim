@@ -15,13 +15,12 @@ El plugin ya está registrado en la configuración de lazy.nvim
 {
   dir = "C:/Users/rosas/Documents/code/plugins/Katana.nvim",
   name = "katana.nvim",
+  dependencies = { "NvChad/volt" },
   config = function()
     require("katana").setup({})
   end,
 }
 ```
-
-La UI es nativa: no requiere Volt ni ningún otro plugin de interfaz.
 
 > **Choque de mapping**: si tu spec ya define `<leader>ca` (o `<leader>cA`),
 > Katana **no** lo pisa: `require("katana").setup()` comprueba `maparg` antes de
@@ -38,9 +37,11 @@ nvim --headless -u NONE -l scripts/icons.lua
 nvim --headless -u NONE -l scripts/e2e.lua
 ```
 
-Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 11 + 47 +
-8 + 12 comprobaciones). Si `clangd` no está disponible, `e2e.lua` lo indica con
-`SKIP` y termina sin errores.
+Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 11 + 51 +
+8 + 12 comprobaciones). Si `Volt` (dependencia de la UI) o `clangd` no están
+disponibles, los scripts lo indican con `SKIP` y terminan sin errores. Volt se
+busca en el `runtimepath` y en las rutas habituales de lazy.nvim; se puede
+forzar con `KATANA_VOLT=/ruta`.
 
 ---
 
@@ -89,7 +90,8 @@ print(greet("mundo"))
 | Cursor sobre `unused` → `<leader>ca` (o `:CodeActions`) | Se abre el picker (lista + prompt + preview) |
 | La lista muestra cabeceras de grupo (`Quick Fix`, `Refactor: Extract`, ...) | Una cabecera por kind, en el orden de `group_order` |
 | Cada acción muestra icono, título, atajo numérico y origen (`lsp:lua_ls`) | Textos legibles, fila seleccionada resaltada |
-| El panel derecho muestra el diff | Cabeceras `--- a/...` / `+++ b/...` y las líneas cambiadas |
+| El preview aparece **debajo** de la lista | Borde propio con título ` Preview ` y `--- a/...` / `+++ b/...` |
+| Con un diff más largo que `preview_max_height` | El panel **no** crece: el contenido se desplaza dentro (rueda, `<C-f>`/`<C-b>` o `<C-d>`/`<C-u>` en la lista) |
 
 Diagnóstico: si el picker no abre, comprueba `:messages`; si abre vacío,
 `lua_ls` no devolvió acciones (es normal, ver el aviso de 2.1).
@@ -117,10 +119,11 @@ de `:KatanaDebug` muestra en `filtro=` lo que se está aplicando de verdad.
 
 | Paso | Resultado esperado |
 | --- | --- |
-| `<C-n>` / `<Down>` | Cambia la fila seleccionada y **el diff de la derecha se actualiza** |
+| `<C-n>` / `<Down>` | Cambia la fila seleccionada y **el diff de abajo se actualiza** |
 | Moverse sobre una acción sin cambios | El panel indica que no produce cambios (título, origen, kind) |
 | `<C-p>` / `<Up>` | Vuelve a la anterior y el diff se regenera |
 | `]` / `[` | Salta al grupo siguiente / anterior |
+| Cambiar de selección tras hacer scroll | El preview vuelve a empezar por arriba (`gg`) |
 
 Diagnóstico: si el diff no cambia, revisar `katana.preview.diff` y que la acción
 tenga `edit` (las acciones de `lua_ls` normalmente lo traen tras el resolve;
@@ -376,7 +379,8 @@ llevaba la lista `diagnostics` ausente.
 - [ ] `:CodeActions` abre el picker con la lista agrupada por kind
 - [ ] Las cabeceras de grupo aparecen en el orden configurado
 - [ ] El filtrado en vivo reduce la lista y se puede vaciar
-- [ ] El diff del panel derecho es correcto y reactivo
+- [ ] El diff del panel inferior es correcto y reactivo
+- [ ] Con un diff largo, el preview scrollea sin crecer por encima de `preview_max_height`
 - [ ] Un `u` deshace únicamente la acción
 - [ ] El picker se cierra y devuelve el foco
 - [ ] Las acciones de Tree-sitter y las registradas por el usuario aparecen

@@ -28,7 +28,15 @@ jobs:
       - name: LSP conformance (resolución, WorkspaceEdit, multi-archivo)
         run: nvim --headless -u NONE -l scripts/lsp_conformance.lua
 
-      - name: UI tests (nativa, sin dependencias)
+      - name: Checkout Volt (motor de la UI)
+        uses: actions/checkout@v4
+        with:
+          repository: NvChad/volt
+          path: volt-ui
+
+      - name: UI tests (Volt)
+        env:
+          KATANA_VOLT: ${{ github.workspace }}/volt-ui
         run: nvim --headless -u NONE -l scripts/ui.lua
 
       - name: Icon and color tests

@@ -19,6 +19,12 @@ local report = env.reporter()
 
 report.header("Katana.nvim · icons/colors/headers test")
 
+if not env.ensure_volt() then
+  report.skip("Volt no está disponible (define KATANA_VOLT con la ruta del plugin)")
+  report.finish()
+  return
+end
+
 local katana = require("katana")
 katana.setup({ ts = { enabled = false }, resolve_on_open = false })
 
@@ -89,42 +95,34 @@ window.open({
 vim.wait(250)
 vim.cmd("stopinsert")
 
-local lines = vim.api.nvim_buf_get_lines(state.buf_main, 0, -1, false)
 local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, ns, 0, -1, { details = true })
+local header_ok, accent_ok, icon_color_ok = false, false, false
+local action_icon_hl
 
---- Grupos de resaltado aplicados a una fila (1-based).
-local function row_hls(row)
-  local names = {}
-  for _, m in ipairs(marks) do
-    if m[2] + 1 == row then
-      local d = m[4] or {}
-      if d.hl_group then
-        names[d.hl_group] = true
+for _, m in ipairs(marks) do
+  local vt = m[4] and m[4].virt_text or {}
+  local txt = {}
+  for _, c in ipairs(vt) do txt[#txt + 1] = tostring(c[1]) end
+  local line = table.concat(txt)
+
+  -- La cabecera debe tener texto azul (KatanaHeader) y el icono azul
+  if line:match("Quick") or line:match("Refactor") then
+    for _, c in ipairs(vt) do
+      if c[2] == "KatanaHeader" then
+        header_ok = true
       end
-      if d.line_hl_group then
-        names[d.line_hl_group] = true
+      if c[2] == "KatanaHeaderIcon" then
+        header_ok = true
       end
-    end
-  end
-  return names
-end
-
-local header_ok, accent_ok = false, false
-
-for i, line in ipairs(lines) do
-  local hls_row = row_hls(i)
-
-  -- La cabecera debe tener texto azul (KatanaHeader)
-  if line:find("Quick", 1, true) or line:find("Refactor", 1, true) then
-    if hls_row.KatanaHeader or hls_row.KatanaHeaderIcon then
-      header_ok = true
     end
   end
 
   -- El selector debe ser azul (KatanaAccent)
-  if line:find("▎", 1, true) then
-    if hls_row.KatanaAccent then
-      accent_ok = true
+  if line:match("▎") then
+    for _, c in ipairs(vt) do
+      if c[1] == "▎" and c[2] == "KatanaAccent" then
+        accent_ok = true
+      end
     end
   end
 end

@@ -17,6 +17,12 @@ local report = env.reporter()
 
 report.header("Katana.nvim · end-to-end test (clangd)")
 
+if not env.ensure_volt() then
+  report.skip("Volt no está disponible (define KATANA_VOLT con la ruta del plugin)")
+  report.finish()
+  return
+end
+
 local clangd = env.find_clangd()
 if not clangd then
   report.skip("clangd no está disponible (define KATANA_CLANGD con la ruta del ejecutable)")
@@ -78,16 +84,23 @@ local ok, err = pcall(function()
   report.check("origen lsp:clangd", first ~= nil and first.source == "lsp:clangd", first and first.source)
   report.check("la acción trae WorkspaceEdit", first ~= nil and first.edit ~= nil)
 
-  --- Texto renderizado en cada fila (texto real del buffer).
+  --- Texto renderizado por Volt en cada fila.
   local function rows_text()
-    if not state.buf_main or not vim.api.nvim_buf_is_valid(state.buf_main) then
-      return {}
+    local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, state.ns_main, 0, -1, { details = true })
+    local rows = {}
+    for _, m in ipairs(marks) do
+      local chunks = m[4] and m[4].virt_text or {}
+      local text = {}
+      for _, chunk in ipairs(chunks) do
+        text[#text + 1] = chunk[1]
+      end
+      rows[m[2] + 1] = table.concat(text)
     end
-    return vim.api.nvim_buf_get_lines(state.buf_main, 0, -1, false)
+    return rows
   end
 
   local rendered = ""
-  if state.buf_main then
+  if state.buf_main and state.ns_main then
     rendered = table.concat(rows_text(), "\n")
   end
   report.check("la lista muestra la acción", first ~= nil and rendered:find(first.title, 1, true) ~= nil, rendered:sub(1, 120))

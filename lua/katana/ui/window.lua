@@ -1,18 +1,15 @@
 ---@mod katana.ui.window Ventanas del picker
 ---
 --- El picker tiene tres ventanas:
----   * la lista de acciones (texto real + extmarks, sin dependencias de UI),
+---   * la lista de acciones (renderizada con Volt),
 ---   * el prompt del filtro en vivo (modo insert),
 ---   * la previsualización del diff.
----
---- No requiere Volt ni ningún otro plugin: usa sólo `nvim_open_win`, buffers y
---- extmarks nativos.
 
 local api = vim.api
+local volt = require("volt")
 
 local state = require("katana.state")
 local config = require("katana.config")
-local metrics = require("katana.metrics")
 local layout = require("katana.ui.layout")
 local list = require("katana.ui.list")
 local preview = require("katana.preview.diff")
@@ -106,8 +103,6 @@ function M.open(actions, on_select)
   state.list_width = geometry.list_width
   state.max_rows = geometry.list_height
 
-  metrics.start("picker_open")
-
   highlights.setup()
 
   ------------------------------------------------------------------- lista
@@ -117,7 +112,7 @@ function M.open(actions, on_select)
   vim.bo[list_buf].swapfile = false
   state.buf_main = list_buf
 
-  local list_opts = {
+  local list_win = api.nvim_open_win(list_buf, false, {
     relative = "editor",
     row = geometry.list.row,
     col = geometry.list.col,
@@ -125,12 +120,9 @@ function M.open(actions, on_select)
     height = geometry.list.height,
     style = "minimal",
     border = geometry.border,
-  }
-  if config.options.title and config.options.title ~= "" then
-    list_opts.title = config.options.title
-    list_opts.title_pos = "center"
-  end
-  local list_win = api.nvim_open_win(list_buf, false, list_opts)
+    title = " Katana ",
+    title_pos = "center",
+  })
   state.win_main = list_win
 
   ------------------------------------------------------------------ prompt
@@ -152,14 +144,14 @@ function M.open(actions, on_select)
   state.win_prompt = prompt_win
 
   ------------------------------------------------------------ previsualización
-  if geometry.preview_width > 0 then
+  if geometry.preview_width > 0 and (geometry.preview_height or 0) > 0 then
     local preview_buf = api.nvim_create_buf(false, true)
     vim.bo[preview_buf].buftype = "nofile"
     vim.bo[preview_buf].bufhidden = "wipe"
     vim.bo[preview_buf].swapfile = false
     state.buf_preview = preview_buf
 
-    local preview_opts = {
+    local preview_win = api.nvim_open_win(preview_buf, false, {
       relative = "editor",
       row = geometry.preview.row,
       col = geometry.preview.col,
@@ -167,27 +159,47 @@ function M.open(actions, on_select)
       height = geometry.preview.height or geometry.list_height,
       style = "minimal",
       border = geometry.border,
-    }
-    if config.options.preview_title and config.options.preview_title ~= "" then
-      preview_opts.title = config.options.preview_title
-      preview_opts.title_pos = "center"
-    end
-    local preview_win = api.nvim_open_win(preview_buf, false, preview_opts)
+      title = " Preview ",
+      title_pos = "center",
+    })
     state.win_preview = preview_win
   end
+
+  -------------------------------------------------------------------- volt
+  -- `volt.run` redibuja el buffer, por lo que el estado debe existir antes
+  -- (`volt.gen_data`).
+  volt.gen_data({
+    {
+      buf = list_buf,
+      ns = state.ns_main,
+      xpad = 2,
+      layout = {
+        {
+          name = "katana_actions",
+          lines = function()
+            return list.rows(geometry.list.height)
+          end,
+        },
+      },
+    },
+  })
+
+  volt.run(list_buf, {
+    h = geometry.list.height,
+    w = geometry.list_width,
+  })
+
+  -- Soporte de ratón: se registra antes de los keymaps propios para que nuestros
+  -- `<CR>` y `<Tab>` tengan prioridad sobre los de Volt.
+  pcall(function()
+    require("volt.events").add(list_buf)
+  end)
 
   M.rebuild()
 
   require("katana.ui.mappings").setup()
 
   state.snapshot("abierto")
-
-  -- Latencia del render del picker (creación de ventanas + primera lista). Se
-  -- guarda para `:KatanaDebug`.
-  local open_ms = metrics.stop("picker_open")
-  if open_ms then
-    state.last.open_ms = open_ms
-  end
 
   ----------------------------------------------------------------- autocmds
   -- `PromptChanged` no existe en Neovim 0.12; `TextChangedI` sí.
@@ -209,13 +221,8 @@ function M.open(actions, on_select)
     end,
   })
 
-  -- Todas las ventanas comparten el fondo del panel (`NormalFloat`) para que el
-  -- prompt sin borde se funda con la lista y no parezca un hueco.
   for _, win in ipairs({ list_win, prompt_win, state.win_preview }) do
     if win and api.nvim_win_is_valid(win) then
-      pcall(function()
-        vim.wo[win].winhl = "Normal:KatanaNormal,FloatBorder:KatanaBorder,CursorLine:KatanaRow"
-      end)
       vim.wo[win].number = false
       vim.wo[win].relativenumber = false
       vim.wo[win].signcolumn = "no"
@@ -225,6 +232,14 @@ function M.open(actions, on_select)
       vim.wo[win].sidescrolloff = 0
       vim.wo[win].cursorline = false
       vim.wo[win].wrap = false
+
+      -- En horizontal la lista conserva su alto reservado; se ocultan las `~`
+      -- de las filas sobrantes para que el panel no parezca roto.
+      if config.options.preview_split == "horizontal" then
+        pcall(function()
+          vim.wo[win].fillchars = "eob: "
+        end)
+      end
     end
   end
 
@@ -285,13 +300,21 @@ function M.close()
     state.au_filter = nil
   end
 
-  for _, win in ipairs({ state.win_main, state.win_prompt, state.win_preview }) do
+  -- `volt.utils.close` borra el buffer de la lista y lo quita de `volt.events`.
+  local list_buf = state.buf_main
+  if list_buf and api.nvim_buf_is_valid(list_buf) then
+    pcall(function()
+      require("volt.utils").close({ bufs = { list_buf } })
+    end)
+  end
+
+  for _, win in ipairs({ state.win_prompt, state.win_preview }) do
     if win and api.nvim_win_is_valid(win) then
       pcall(api.nvim_win_close, win, true)
     end
   end
 
-  for _, buf in ipairs({ state.buf_main, state.buf_prompt, state.buf_preview }) do
+  for _, buf in ipairs({ state.buf_prompt, state.buf_preview }) do
     if buf and api.nvim_buf_is_valid(buf) then
       pcall(api.nvim_buf_delete, buf, { force = true })
     end

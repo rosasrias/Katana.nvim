@@ -10,19 +10,26 @@ A diferencia de un picker plano, Katana mantiene su **UI agrupada por kind**
 (cabeceras de grupo, iconos, atajos numéricos `1`-`9`) y le añade **filtrado en
 vivo** y **previsualización reactiva del diff** de la acción seleccionada.
 
-La interfaz usa **sólo la UI nativa de Neovim** (ventanas flotantes, buffers y
-extmarks): no depende de Volt, Telescope, snacks ni fzf-lua.
+La interfaz está construida sobre [Volt](https://github.com/NvChad/volt) (el motor
+de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
 
 ```
- > filtrar en vivo
-┌──────────────────────────────────────────┬──────────────────────────┐
-│  󰫖 Quick Fix ───────────────────────────  │  --- a/main.c            │
-│▎1 󰫖 insert ';'            lsp:clangd     │  +++ b/main.c            │
-│  󰛹 Refactor: Extract ───────────────────  │  @@ -1,4 +1,4 @@        │
-│ 2 󰛹 Extract function      lsp:lua_ls      │   int main(void) {       │
-│ 3 󰛹 Extract variable       lsp:lua_ls     │  -  int x = 1            │
-│                                          │  +  int x = 1;           │
-└──────────────────────────────────────────┴──────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  > filtrar en vivo                                                  │
+├──────────────────────────────────────────────────────────────────────┤
+│  󰁨  Quick Fix                                                        │
+│▎1. 󰁨 insert ';'                                         lsp:clangd   │
+│                                                                      │
+│  󰛹  Refactor: Extract ─────────────────────────────────────────────  │
+│ 2. 󰛹 Extract function                                    lsp:clangd   │
+├──────────────────────────────────────────────────────────────────────┤
+│  --- a/main.c                         ← preview (alto máx. + scroll) │
+│  +++ b/main.c                                                        │
+│  @@ -1,4 +1,4 @@                                                     │
+│   int main(void) {                                                   │
+│  -  int x = 1                                                        │
+│  +  int x = 1;                                                       │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Aspecto
@@ -52,6 +59,7 @@ Con [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
   "rosasrias/Katana.nvim",
   dependencies = {
+    "NvChad/volt",          -- obligatorio: motor de la UI
     "nvim-mini/mini.icons", -- opcional: iconos nf-md
   },
   opts = {
@@ -63,8 +71,10 @@ Con [lazy.nvim](https://github.com/folke/lazy.nvim):
 }
 ```
 
-Katana **no tiene dependencias obligatorias**. Si `mini.icons` no está, se usan
-los iconos de `config.options.icons`.
+Volt es una dependencia **obligatoria**: Katana lo requiere al cargar la UI
+(`lua/katana/ui/window.lua` y `lua/katana/ui/list.lua`). Sin él, el picker falla
+con `module 'volt' not found`. `mini.icons` es opcional; si no está, se usan los
+iconos de `config.options.icons`.
 
 Si lo tienes en local (`dir = "..."`), cambia la primera entrada por la ruta.
 
@@ -95,6 +105,7 @@ Dentro del picker (la **ventana de filtro** es la que tiene el foco al abrir):
 | Escribir | Filtra en vivo (fuzzy) por título, kind y origen |
 | `<C-n>` / `<Down>` / `<Tab>` | Siguiente acción (salta las cabeceras de grupo) |
 | `<C-p>` / `<Up>` / `<S-Tab>` | Acción anterior |
+| `<C-f>` / `<C-b>` | Desplazar el preview (3 líneas abajo / arriba) |
 | `<CR>` | Ejecuta la acción seleccionada y cierra |
 | `<Esc>` / `<C-c>` / `q` | Cierra |
 
@@ -104,13 +115,18 @@ En la **ventana de lista** (modo normal):
 | --- | --- |
 | `j` / `k` / `<Down>` / `<Up>` | Navegar por las acciones |
 | `]` / `[` | Saltar al grupo siguiente / anterior |
+| `<C-d>` / `<C-u>` | Desplazar el preview (3 líneas abajo / arriba) |
 | `<CR>` / `<Space>` | Ejecutar la acción seleccionada |
 | `1` … `9` | Ejecutar directamente la acción *n* |
 | `<Tab>` | Volver al prompt para seguir filtrando |
 | `q` / `<Esc>` / `<C-c>` | Cerrar |
 
-El panel derecho muestra el **diff** que producirá la acción seleccionada y se
-recalcula de forma reactiva al mover la selección.
+El preview aparece **debajo** de la lista (`preview_split = "horizontal"`). Su
+alto está limitado por `preview_max_height`: si el diff no cabe, la ventana no
+crece y el contenido se desplaza dentro de ella con `<C-f>`/`<C-b>` (prompt),
+`<C-d>`/`<C-u>` (lista), la rueda del ratón o `j`/`k` con el foco en el preview.
+Se recalcula de forma reactiva al mover la selección y vuelve al principio en
+cada cambio.
 
 ---
 
@@ -122,13 +138,12 @@ require("katana").setup({
   keymap = "<leader>ca",
 
   preview = true,              -- panel de previsualización del diff
-  preview_split = "vertical",  -- "vertical" | "horizontal"
+  preview_split = "horizontal",-- "horizontal" (debajo) | "vertical" (derecha)
+  preview_max_height = 12,     -- alto máximo del preview; si el diff es más
+                               -- largo, se desplaza dentro de la ventana
   width = 0.85,                -- fracción del ancho del editor
   height = 0.85,               -- fracción del alto del editor
-  auto_width = true,           -- ajusta la lista a sus títulos (aspecto compacto)
   border = "rounded",          -- estilo de borde de las flotantes
-  title = "",                  -- título del panel ("" = sin título)
-  preview_title = "",          -- título del preview ("" = sin título)
   prompt = " > ",              -- prompt de la ventana de filtrado (no cuenta como filtro)
 
   -- Aspecto de la fila seleccionada. Por defecto se derivan del tema; fíjalos si
@@ -174,9 +189,9 @@ require("katana").setup({
     "command",
     "other",
   },
-  -- Fusiona sólo acciones con el mismo título, kind **y** payload (edit/command).
-  -- Dos servidores que devuelven el mismo título con ediciones distintas se
-  -- muestran como filas separadas: aplicar una no equivale a aplicar la otra.
+  -- Fusiona sólo acciones con el mismo título, kind **y** payload (edit/command):
+  -- dos servidores con el mismo título y ediciones distintas son filas
+  -- separadas, porque aplicar una no equivale a aplicar la otra.
   dedupe = true,
 
   -- Peso por kind y por cliente LSP (desempates dentro de la misma prioridad).
@@ -360,19 +375,20 @@ El proveedor usa `vim.treesitter.get_node` (Neovim 0.12) con respaldo a
 
 ## Notas de implementación y limitaciones
 
-### UI nativa
+### Volt
 
-- La lista es **texto real del buffer** con `nvim_buf_set_extmark` para el color:
-  cada fila se construye como chunks `{ texto, grupo_hl }`, de modo que el texto
-  y el resaltado no puedan desincronizarse.
-- El buffer contiene **todas** las filas (para poder desplazarse) y la ventana
-  muestra como mucho `max_rows`: al filtrar se reescribe el buffer (`modifiable`
-  sólo durante el render) y se recolocan los extmarks.
-- El fondo de la fila activa se pinta con `line_hl_group = "KatanaRow"` (se
-  extiende hasta el final de la línea) y la barra `▎` con un chunk propio.
-- `auto_width` ajusta el ancho de la lista a los títulos y cede el resto al
-  preview; el panel se centra en el editor.
-- Soporte de ratón propio: `<LeftMouse>` selecciona, `<2-LeftMouse>` confirma.
+- El buffer de la lista contiene **todas** las filas (para poder desplazarse) y
+  la ventana muestra como mucho `max_rows`: al filtrar cambia el número de
+  filas, así que hay que limpiar el namespace (`nvim_buf_clear_namespace`) y
+  redimensionar las líneas en blanco antes de redibujar.
+- El texto de cada fila es `virt_text` (los *marks* de Volt). `volt.draw`
+  **elimina el tercer elemento** de cada mark (donde vive la acción del click),
+  por lo que las tablas de marks se reconstruyen en cada render.
+- **No** se usa `volt.events.add` para la lista: la navegación y la confirmación
+  se gestionan con keymaps propios para tener control total del flujo.
+- `volt.events.enable()` instala un handler global de `vim.on_key` (para el
+  soporte de ratón). Es un efecto secundario de Volt que ya afecta a otros
+  plugins del ecosistema (menu, minty).
 
 ### LSP
 
@@ -517,7 +533,7 @@ lua/katana/
 ├── ui/
 │   ├── window.lua        -- ciclo de vida de las ventanas del picker
 │   ├── layout.lua        -- geometría (lista, prompt y preview)
-│   ├── list.lua          -- render nativo de la lista (texto + extmarks)
+│   ├── list.lua          -- render de la lista con Volt
 │   ├── filter.lua        -- filtrado en vivo fuzzy
 │   ├── mappings.lua      -- keymaps de la lista y del prompt
 │   └── highlights.lua    -- highlights (KatanaSelected, KatanaHeader, MiniIcons*, ...)
@@ -537,13 +553,15 @@ Pruebas headless (no necesitan interfaz):
 ```bash
 nvim --headless -u NONE -l scripts/smoke.lua           # motor (49 comprobaciones)
 nvim --headless -u NONE -l scripts/lsp_conformance.lua # conformidad LSP (11 comprobaciones)
-nvim --headless -u NONE -l scripts/ui.lua              # UI nativa (47 comprobaciones)
+nvim --headless -u NONE -l scripts/ui.lua              # UI sobre Volt (51 comprobaciones)
 nvim --headless -u NONE -l scripts/icons.lua           # iconos y colores (8 comprobaciones)
 nvim --headless -u NONE -l scripts/e2e.lua             # LSP real con clangd (12 comprobaciones)
 ```
 
-Ningún script necesita Volt. `scripts/e2e.lua` necesita **clangd**
-(`KATANA_CLANGD`); si no está, se marca `SKIP` y no falla.
+`scripts/ui.lua` y `scripts/e2e.lua` necesitan el plugin **Volt** (se busca en el
+`runtimepath` y en las rutas habituales de lazy.nvim; se puede forzar con
+`KATANA_VOLT=/ruta`). `scripts/e2e.lua` necesita **clangd** (`KATANA_CLANGD`).
+Si falta alguno, el script lo marca como `SKIP` y termina sin errores.
 
 El plan de pruebas manual está en [TESTPLAN.md](./TESTPLAN.md).
 

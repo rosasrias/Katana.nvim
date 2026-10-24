@@ -150,6 +150,14 @@ function M.setup_list()
   vim.keymap.set("n", "]", M.next_group, opts)
   vim.keymap.set("n", "[", M.prev_group, opts)
 
+  -- Desplazar el preview (que puede tener más líneas que su alto máximo).
+  vim.keymap.set("n", "<C-d>", function()
+    preview.scroll(3)
+  end, opts)
+  vim.keymap.set("n", "<C-u>", function()
+    preview.scroll(-3)
+  end, opts)
+
   vim.keymap.set("n", "<CR>", function()
     require("katana.ui.window").confirm()
   end, opts)
@@ -172,26 +180,6 @@ function M.setup_list()
     if state.win_prompt and vim.api.nvim_win_is_valid(state.win_prompt) then
       vim.api.nvim_set_current_win(state.win_prompt)
       vim.cmd("startinsert!")
-    end
-  end, opts)
-
-  -- Ratón: un clic selecciona la fila, doble clic la ejecuta.
-  vim.keymap.set("n", "<LeftMouse>", function()
-    local mouse = vim.fn.getmousepos()
-    if mouse.winid ~= state.win_main then
-      return
-    end
-    if list.select_row(mouse.line) and config.options.auto_preview then
-      preview.update()
-    end
-  end, opts)
-  vim.keymap.set("n", "<2-LeftMouse>", function()
-    local mouse = vim.fn.getmousepos()
-    if mouse.winid ~= state.win_main then
-      return
-    end
-    if list.select_row(mouse.line) then
-      require("katana.ui.window").confirm()
     end
   end, opts)
 
@@ -243,6 +231,15 @@ function M.setup_prompt()
   end, opts)
   vim.keymap.set("i", "<S-Tab>", function()
     M.move(-1)
+  end, opts)
+
+  -- Desplazar el preview sin salir del filtro. Se usan <C-f>/<C-b> y **no**
+  -- <C-d>/<C-u> porque en el prompt `<C-u>` borra el filtro escrito.
+  vim.keymap.set("i", "<C-f>", function()
+    preview.scroll(3)
+  end, opts)
+  vim.keymap.set("i", "<C-b>", function()
+    preview.scroll(-3)
   end, opts)
   vim.keymap.set("i", "<Esc>", function()
     require("katana.ui.window").close()

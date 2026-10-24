@@ -3,6 +3,7 @@ local M = {}
 ---@class KatanaOptions
 ---@field preview boolean Muestra el panel de previsualización del diff
 ---@field preview_split '"vertical"'|'"horizontal"' Orientación del preview
+---@field preview_max_height integer Alto máximo del preview (filas); el resto se scrollea
 ---@field width number Fracción del ancho del editor ocupada por el picker
 ---@field height number Fracción del alto del editor ocupada por el picker
 ---@field border string Estilo del borde de las ventanas flotantes
@@ -32,12 +33,15 @@ local M = {}
 
 M.defaults = {
   preview = true,
-  preview_split = "vertical",
+  -- "horizontal" deja el preview **debajo** de la lista de acciones (por
+  -- defecto); "vertical" lo pone a la derecha.
+  preview_split = "horizontal",
+  -- Alto máximo del preview en filas. Si el diff es más largo, la ventana no
+  -- crece: el contenido se desplaza dentro de ella (rueda del ratón,
+  -- `<C-f>`/`<C-b>` en el prompt o `<C-d>`/`<C-u>` en la lista).
+  preview_max_height = 12,
   width = 0.85,
   height = 0.85,
-  -- Ajusta el ancho de la lista al contenido (títulos + origen) y cede el
-  -- espacio sobrante al preview. Da el aspecto compacto del menú nativo.
-  auto_width = true,
   prompt = " > ",
   show_server_name = true,
   show_preferred = true,
@@ -110,11 +114,6 @@ M.defaults = {
     preferred = "★",
   },
   border = "rounded",
-  -- Título de la ventana del picker. Vacío = sin título (aspecto compacto, como
-  -- el menú nativo de code actions).
-  title = "",
-  -- Título del panel de previsualización. Vacío = sin título.
-  preview_title = "",
   hide_disabled = false,
 
   -- Prioridad de los kinds (índice 0 = máxima). Los kinds no listados quedan al

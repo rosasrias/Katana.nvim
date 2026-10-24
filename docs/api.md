@@ -47,9 +47,9 @@ una no equivale a aplicar la otra.
 
 ## UI
 
-La interfaz es nativa (`nvim_open_win` + extmarks); no requiere Volt. Opciones
-relevantes: `auto_width`, `title`, `preview_title`, `border`, `preview_split`,
-`selection_color`, `selection_accent`.
+La interfaz se dibuja con [Volt](https://github.com/NvChad/volt). Opciones
+relevantes: `border`, `preview_split` (`"horizontal"` = preview debajo),
+`preview_max_height`, `selection_color`, `selection_accent`.
 
 ## Compatibilidad
 

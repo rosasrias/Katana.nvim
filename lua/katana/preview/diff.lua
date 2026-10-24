@@ -73,6 +73,35 @@ function M.update()
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.bo[buf].filetype = "diff"
+
+  -- Cada acción empieza a previsualizarse desde arriba, aunque la anterior
+  -- estuviera desplazada.
+  local win = state.win_preview
+  if win and vim.api.nvim_win_is_valid(win) then
+    pcall(vim.api.nvim_win_call, win, function()
+      vim.cmd("normal! ggzt")
+    end)
+  end
+end
+
+--- Desplaza el contenido del preview sin cambiar la selección.
+---
+--- El preview tiene un alto máximo (`preview_max_height`); cuando el diff no
+--- cabe, se navega dentro de su ventana con la rueda del ratón, `j`/`k` (si
+--- tiene el foco) o estos atajos desde la lista/prompt.
+---@param delta integer líneas a desplazar (positivo = hacia abajo)
+function M.scroll(delta)
+  local win = state.win_preview
+  if not win or not vim.api.nvim_win_is_valid(win) or delta == 0 then
+    return
+  end
+
+  local key = delta > 0 and "\5" or "\25" -- <C-e> / <C-y>
+  local count = math.abs(delta)
+
+  pcall(vim.api.nvim_win_call, win, function()
+    vim.cmd(("normal! %d%s"):format(count, key))
+  end)
 end
 
 return M

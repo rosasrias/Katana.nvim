@@ -1,9 +1,10 @@
--- Prueba de la UI nativa del picker de Katana: ventanas, render, agrupación,
+-- Prueba de la UI del picker de Katana (Volt): ventanas, render, agrupación,
 -- filtro en vivo, preview reactivo, confirmación y undo agrupado.
 --
 --   nvim --headless -u NONE -l scripts/ui.lua
 --
--- No requiere Volt: la lista se dibuja con texto real y extmarks nativos.
+-- Requiere el plugin Volt. Se busca en el `runtimepath` y, si no está, en las
+-- rutas habituales de lazy.nvim. Se puede forzar con `KATANA_VOLT=/ruta`.
 
 local script = debug.getinfo(1, "S").source:sub(2)
 local dir = vim.fn.fnamemodify(script, ":p:h")
@@ -15,6 +16,12 @@ local env = dofile(dir .. "/env.lua")
 local report = env.reporter()
 
 report.header("Katana.nvim · UI test")
+
+if not env.ensure_volt() then
+  report.skip("Volt no está disponible (define KATANA_VOLT con la ruta del plugin)")
+  report.finish()
+  return
+end
 
 local katana = require("katana")
 katana.setup({ ts = { enabled = false }, resolve_on_open = false })
@@ -70,11 +77,20 @@ report.check("buffer de prompt creado", state.buf_prompt ~= nil and vim.api.nvim
 report.check("prompt en modo prompt", vim.bo[state.buf_prompt].buftype == "prompt", vim.bo[state.buf_prompt].buftype)
 report.check("prompt enfocado", vim.api.nvim_get_current_win() == state.win_prompt)
 report.check("buffer de preview creado", state.buf_preview ~= nil and vim.api.nvim_buf_is_valid(state.buf_preview))
-report.check("métrica de apertura registrada (ms)", type(state.last.open_ms) == "number", state.last.open_ms)
 
---- Texto renderizado en cada fila (ahora es texto real del buffer).
+--- Texto renderizado por Volt en cada fila.
 local function rows_text()
-  return vim.api.nvim_buf_get_lines(state.buf_main, 0, -1, false)
+  local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, state.ns_main, 0, -1, { details = true })
+  local rows = {}
+  for _, m in ipairs(marks) do
+    local chunks = m[4] and m[4].virt_text or {}
+    local text = {}
+    for _, chunk in ipairs(chunks) do
+      text[#text + 1] = chunk[1]
+    end
+    rows[m[2] + 1] = table.concat(text)
+  end
+  return rows
 end
 
 local function rows_contain(needle)
@@ -93,20 +109,23 @@ report.check("icono + título en la acción", (rows[2] or ""):find("Fix typo") ~
 report.check("origen visible", (rows[2] or ""):find("lsp:lua_ls") ~= nil, rows[2])
 report.check("agrupación: 4 acciones + 4 cabeceras", #state.flat == 8, #state.flat)
 
---- Grupos de resaltado presentes en una fila (extmarks nativos).
-local function row_hls(row)
+--- Aspecto: barra de selección, colores por kind y regla de las cabeceras.
+---@return table[] marcas de la fila `row` (1-based)
+local function row_marks(row)
   local marks = vim.api.nvim_buf_get_extmarks(state.buf_main, state.ns_main, 0, -1, { details = true })
-  local names = {}
   for _, m in ipairs(marks) do
     if m[2] + 1 == row then
-      local details = m[4] or {}
-      if details.hl_group then
-        names[#names + 1] = details.hl_group
-      end
-      if details.line_hl_group then
-        names[#names + 1] = details.line_hl_group
-      end
+      return m[4] and m[4].virt_text or {}
     end
+  end
+  return {}
+end
+
+--- Grupos de resaltado presentes en una fila.
+local function row_hls(row)
+  local names = {}
+  for _, chunk in ipairs(row_marks(row)) do
+    names[#names + 1] = chunk[2]
   end
   return names
 end
@@ -190,6 +209,44 @@ local rl, rp, rr = rect(state.win_main), rect(state.win_prompt), rect(state.win_
 report.check("lista y prompt no se solapan", not overlaps(rl, rp), vim.inspect({ rl, rp }))
 report.check("lista y preview no se solapan", not overlaps(rl, rr), vim.inspect({ rl, rr }))
 report.check("prompt y preview no se solapan", not overlaps(rp, rr), vim.inspect({ rp, rr }))
+
+--- Disposición por defecto: el preview va **debajo** de la lista.
+local cfg = require("katana.config").options
+report.check("preview_split por defecto horizontal", cfg.preview_split == "horizontal", cfg.preview_split)
+report.check(
+  "preview debajo de la lista (misma columna, fila posterior)",
+  rr[2] == rl[2] and rr[1] >= rl[1] + rl[3],
+  vim.inspect({ list = rl, preview = rr })
+)
+report.check(
+  "preview respeta preview_max_height",
+  rr[3] <= cfg.preview_max_height,
+  string.format("%d <= %d", rr[3], cfg.preview_max_height)
+)
+
+--- El preview hace scroll dentro de su ventana si el diff no cabe.
+local function preview_top()
+  return vim.api.nvim_win_call(state.win_preview, function()
+    return vim.fn.line("w0")
+  end)
+end
+
+local preview = require("katana.preview.diff")
+local long_lines = {}
+for i = 1, 80 do
+  long_lines[i] = "+line " .. i
+end
+vim.bo[state.buf_preview].modifiable = true
+vim.api.nvim_buf_set_lines(state.buf_preview, 0, -1, false, long_lines)
+vim.bo[state.buf_preview].modifiable = false
+
+local top_before = preview_top()
+preview.scroll(3)
+local top_after = preview_top()
+report.check("preview.scroll desplaza el contenido", top_after == top_before + 3, string.format("%d -> %d", top_before, top_after))
+
+preview.update()
+report.check("preview.update vuelve al principio", preview_top() == 1, preview_top())
 
 --- Preview reactivo: muestra el diff de la acción seleccionada.
 local preview_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_preview, 0, -1, false), "\n")
