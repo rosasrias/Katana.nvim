@@ -21,7 +21,12 @@ function M.resolve_batch(actions, limit)
 
     if type(action.resolve_fn) == "function" and not action.edit and not action.command then
       count = count + 1
-      M.resolve_single(action)
+      local ok_res, err_res = pcall(M.resolve_single, action)
+      if not ok_res then
+        pcall(function()
+          vim.notify("Katana: error al resolver acción: " .. tostring(err_res), vim.log.levels.DEBUG)
+        end)
+      end
     else
       action._resolved = true
     end
@@ -56,7 +61,12 @@ function M.resolve_single(action, cb)
   end
 
   local finished = false
+  local done_called = false
   local function done(resolved)
+    if done_called then
+      return
+    end
+    done_called = true
     if finished then
       return
     end
@@ -83,8 +93,9 @@ function M.resolve_single(action, cb)
     return
   end
 
-  -- Si la función de resolución devuelve la acción (estilo síncrono), se usa.
-  if type(result) == "table" then
+  -- Si la función de resolución devuelve la acción (estilo síncrono), se usa
+  -- solo si no se ha llamado a done() ya.
+  if type(result) == "table" and not done_called then
     done(result)
   end
 end
