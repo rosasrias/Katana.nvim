@@ -79,11 +79,19 @@ report.check("lista enfocada", vim.api.nvim_get_current_win() == state.win_main)
 report.check("sin ventana de filtro", state.win_prompt == nil and state.buf_prompt == nil)
 report.check("buffer de preview creado", state.buf_preview ~= nil and vim.api.nvim_buf_is_valid(state.buf_preview))
 
+--- Los grupos `Katana*` se definen en el namespace global: es el que usan los
+--- extmarks al resolver el resaltado (definirlos en un namespace propio sin
+--- asignarlo a la ventana dejaría la lista sin color).
+report.check(
+  "los grupos del picker son globales",
+  vim.api.nvim_get_hl(0, { name = "KatanaSelectedText", link = false }).fg ~= nil
+)
+
 --- Sin cursor visible en la lista: `guicursor` apunta a un grupo con el fondo
 --- de la fila activa, así no queda una raya gris junto al número.
 report.check("cursor oculto en la lista", vim.o.guicursor:find("KatanaCursor") ~= nil, vim.o.guicursor)
 local cursor_hl = vim.api.nvim_get_hl(0, { name = "KatanaCursor", link = false })
-local row_hl = vim.api.nvim_get_hl(state.ns_main, { name = "KatanaRow", link = false })
+local row_hl = vim.api.nvim_get_hl(0, { name = "KatanaRow", link = false })
 report.check(
   "el cursor usa el fondo de la fila activa",
   cursor_hl.bg ~= nil and cursor_hl.bg == row_hl.bg,
@@ -195,8 +203,8 @@ end
 report.check("el icono usa su variante seleccionada", icon_sel ~= nil, tostring(icon_sel))
 
 --- El texto de la fila activa va en azul (no en blanco como el resto).
-local sel_text = vim.api.nvim_get_hl(state.ns_main, { name = "KatanaSelectedText", link = false })
-local title_def = vim.api.nvim_get_hl(state.ns_main, { name = "KatanaTitle", link = false })
+local sel_text = vim.api.nvim_get_hl(0, { name = "KatanaSelectedText", link = false })
+local title_def = vim.api.nvim_get_hl(0, { name = "KatanaTitle", link = false })
 report.check(
   "el texto de la fila activa es azul",
   sel_text.fg ~= nil and sel_text.fg ~= title_def.fg,

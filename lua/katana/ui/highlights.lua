@@ -146,46 +146,45 @@ function M.setup()
   -- Resaltado de la fila seleccionada: se aplica a toda la fila (`KatanaRow`) y
   -- a los tramos con color propio (`KatanaSelected*`). La señal de selección es
   -- el **texto en azul** (`selection_accent`), no una barra ni un glifo.
-  hl(state.ns_main, "KatanaRow", {
+  hl(0, "KatanaRow", {
     bg = sel_bg,
     fg = c.white,
     bold = true,
   })
   -- Cursor de la lista: en el TUI el color del cursor sale del fondo del grupo,
   -- así que con el mismo fondo que la fila activa queda invisible (no hay raya
-  -- gris a la izquierda del número). Debe ser global: `guicursor` lo resuelve
-  -- fuera del namespace del picker.
-  vim.api.nvim_set_hl(0, "KatanaCursor", { bg = sel_bg, fg = sel_bg })
-  hl(state.ns_main, "KatanaSelectedText", {
+  -- gris junto al número).
+  hl(0, "KatanaCursor", { bg = sel_bg, fg = sel_bg })
+  hl(0, "KatanaSelectedText", {
     bg = sel_bg,
     fg = accent,
     bold = true,
   })
-  hl(state.ns_main, "KatanaSelectedNum", {
+  hl(0, "KatanaSelectedNum", {
     bg = sel_bg,
     fg = accent,
     bold = true,
   })
-  hl(state.ns_main, "KatanaSelectedSource", {
+  hl(0, "KatanaSelectedSource", {
     bg = sel_bg,
     fg = accent,
     italic = true,
   })
-  hl(state.ns_main, "KatanaSelectedPreferred", {
+  hl(0, "KatanaSelectedPreferred", {
     bg = sel_bg,
     fg = c.yellow,
     bold = true,
   })
 
-  hl(state.ns_main, "KatanaHeader", { fg = c.blue, bold = true })
-  hl(state.ns_main, "KatanaHeaderIcon", { fg = c.blue })
-  hl(state.ns_main, "KatanaSeparator", { fg = c.grey_fg2 })
+  hl(0, "KatanaHeader", { fg = c.blue, bold = true })
+  hl(0, "KatanaHeaderIcon", { fg = c.blue })
+  hl(0, "KatanaSeparator", { fg = c.grey_fg2 })
 
-  hl(state.ns_main, "KatanaNum", { fg = c.grey_fg })
-  hl(state.ns_main, "KatanaSourceName", { fg = c.grey_fg, italic = true })
-  hl(state.ns_main, "KatanaTitle", { fg = c.fg })
-  hl(state.ns_main, "KatanaPreferred", { fg = c.yellow, bold = true })
-  hl(state.ns_main, "KatanaDisabled", { fg = c.grey_fg2, strikethrough = true })
+  hl(0, "KatanaNum", { fg = c.grey_fg })
+  hl(0, "KatanaSourceName", { fg = c.grey_fg, italic = true })
+  hl(0, "KatanaTitle", { fg = c.fg })
+  hl(0, "KatanaPreferred", { fg = c.yellow, bold = true })
+  hl(0, "KatanaDisabled", { fg = c.grey_fg2, strikethrough = true })
 
   -- Un color por kind: es lo que da color propio a cada icono. Se eligen colores
   -- distintos dentro de cada familia (extra/inline/rewrite/convert no comparten
@@ -209,8 +208,8 @@ function M.setup()
   }
 
   for name, color in pairs(kind_colors) do
-    hl(state.ns_main, name, { fg = color })
-    hl(state.ns_main, name .. "Sel", { fg = color, bg = sel_bg })
+    hl(0, name, { fg = color })
+    hl(0, name .. "Sel", { fg = color, bg = sel_bg })
   end
 
   ------------------------------------------------------------------ mini.icons
@@ -250,15 +249,14 @@ function M.setup()
     end
   end
 
-  -- Volt pinta dentro de `ns_main`, y los grupos de un namespace **no** ven los
-  -- definidos en otro (los `MiniIcons*` globales viven en el namespace 0). Por
-  -- eso se replican aquí: la fila sin seleccionar referencia el grupo base, y la
-  -- seleccionada su variante `Sel`, y ambos tienen que resolver en `ns_main`.
+  -- Los grupos se definen en el namespace global (0), que es el que usan los
+  -- extmarks al resolver el resaltado. La fila sin seleccionar referencia el
+  -- grupo base del tema y la seleccionada su variante `Sel`.
   for name, _ in pairs(icons.color_fallbacks) do
     local fg = effective_fg(name)
     if fg then
-      hl(state.ns_main, name, { fg = fg })
-      hl(state.ns_main, name .. "Sel", { fg = fg, bg = sel_bg })
+      hl(0, name, { fg = fg })
+      hl(0, name .. "Sel", { fg = fg, bg = sel_bg })
     end
   end
 end
@@ -280,7 +278,7 @@ function M.selected_hl_for(hl_group, selected)
   end
 
   local variant = hl_group .. "Sel"
-  local def = vim.api.nvim_get_hl(state.ns_main, { name = variant, link = false })
+  local def = vim.api.nvim_get_hl(0, { name = variant, link = false })
   if def.fg then
     return variant
   end
