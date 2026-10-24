@@ -47,9 +47,11 @@ una no equivale a aplicar la otra.
 
 ## UI
 
-La interfaz se dibuja con [Volt](https://github.com/NvChad/volt). Opciones
-relevantes: `border`, `preview_split` (`"horizontal"` = preview debajo),
-`preview_max_height`, `selection_color`, `selection_accent`.
+La interfaz se dibuja con [Volt](https://github.com/NvChad/volt). Hay dos
+ventanas: la lista (con alto fijo) y el preview debajo. No hay ventana de
+filtro. Opciones relevantes: `border`, `list_max_height`, `preview_split`
+(`"horizontal"` = preview debajo), `preview_max_height`, `selection_color`,
+`selection_accent`.
 
 ## Compatibilidad
 

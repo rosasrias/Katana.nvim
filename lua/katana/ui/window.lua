@@ -1,9 +1,11 @@
 ---@mod katana.ui.window Ventanas del picker
 ---
---- El picker tiene tres ventanas:
+--- El picker tiene dos ventanas:
 ---   * la lista de acciones (renderizada con Volt),
----   * el prompt del filtro en vivo (modo insert),
----   * la previsualización del diff.
+---   * la previsualización del diff (debajo de la lista).
+---
+--- No hay ventana de filtro: se navega directamente con `j`/`k` (o las flechas)
+--- y se confirma con `<CR>`.
 
 local api = vim.api
 local volt = require("volt")
@@ -18,32 +20,9 @@ local highlights = require("katana.ui.highlights")
 
 local M = {}
 
---- Texto que el usuario ha escrito en un buffer `buftype=prompt`.
----
---- Neovim guarda la línea del buffer **con el prefijo del prompt delante**
---- (`prompt_setprompt`), así que leer la línea tal cual devuelve `" > "` cuando
---- el filtro está vacío. Eso haría que ninguna acción coincidiese y que la lista
---- apareciese como *No matching actions*.
----@param buf integer
----@return string
-local function prompt_text(buf)
-  local line = api.nvim_buf_get_lines(buf, 0, 1, false)[1] or ""
-
-  local prompt = ""
-  pcall(function()
-    prompt = vim.fn.prompt_getprompt(buf) or ""
-  end)
-
-  if prompt ~= "" and line:sub(1, #prompt) == prompt then
-    line = line:sub(#prompt + 1)
-  end
-
-  return line
-end
-
 --- Reconstruye las filas de la lista a partir de `state.filtered`.
 ---
---- Se llama al abrir el picker y cada vez que cambia el filtro.
+--- Se llama al abrir el picker.
 function M.rebuild()
   local opts = config.options
 
@@ -112,7 +91,8 @@ function M.open(actions, on_select)
   vim.bo[list_buf].swapfile = false
   state.buf_main = list_buf
 
-  local list_win = api.nvim_open_win(list_buf, false, {
+  -- La lista es la ventana activa: no hay prompt, se navega en modo normal.
+  local list_win = api.nvim_open_win(list_buf, true, {
     relative = "editor",
     row = geometry.list.row,
     col = geometry.list.col,
@@ -124,24 +104,6 @@ function M.open(actions, on_select)
     title_pos = "center",
   })
   state.win_main = list_win
-
-  ------------------------------------------------------------------ prompt
-  local prompt_buf = api.nvim_create_buf(false, true)
-  vim.bo[prompt_buf].buftype = "prompt"
-  vim.bo[prompt_buf].bufhidden = "wipe"
-  vim.fn.prompt_setprompt(prompt_buf, config.options.prompt or " > ")
-  state.buf_prompt = prompt_buf
-
-  local prompt_win = api.nvim_open_win(prompt_buf, true, {
-    relative = "editor",
-    row = geometry.prompt.row,
-    col = geometry.prompt.col,
-    width = geometry.prompt.width,
-    height = 1,
-    style = "minimal",
-    border = "none",
-  })
-  state.win_prompt = prompt_win
 
   ------------------------------------------------------------ previsualización
   if geometry.preview_width > 0 and (geometry.preview_height or 0) > 0 then
@@ -190,7 +152,7 @@ function M.open(actions, on_select)
   })
 
   -- Soporte de ratón: se registra antes de los keymaps propios para que nuestros
-  -- `<CR>` y `<Tab>` tengan prioridad sobre los de Volt.
+  -- `<CR>` tengan prioridad sobre los de Volt.
   pcall(function()
     require("volt.events").add(list_buf)
   end)
@@ -202,14 +164,6 @@ function M.open(actions, on_select)
   state.snapshot("abierto")
 
   ----------------------------------------------------------------- autocmds
-  -- `PromptChanged` no existe en Neovim 0.12; `TextChangedI` sí.
-  state.au_filter = api.nvim_create_autocmd("TextChangedI", {
-    buffer = prompt_buf,
-    callback = function()
-      require("katana.ui.filter").apply(prompt_text(prompt_buf))
-    end,
-  })
-
   state.au_close = api.nvim_create_autocmd("WinClosed", {
     buffer = list_buf,
     callback = function()
@@ -221,7 +175,7 @@ function M.open(actions, on_select)
     end,
   })
 
-  for _, win in ipairs({ list_win, prompt_win, state.win_preview }) do
+  for _, win in ipairs({ list_win, state.win_preview }) do
     if win and api.nvim_win_is_valid(win) then
       vim.wo[win].number = false
       vim.wo[win].relativenumber = false
@@ -243,15 +197,7 @@ function M.open(actions, on_select)
     end
   end
 
-  api.nvim_set_current_win(prompt_win)
-
-  -- El buffer `buftype=prompt` arranca en modo insert, pero lo forzamos por si el
-  -- usuario lo cerró con `<C-c>` anteriormente.
-  vim.schedule(function()
-    if state.open and state.win_prompt and api.nvim_win_is_valid(state.win_prompt) then
-      pcall(vim.cmd, "startinsert!")
-    end
-  end)
+  api.nvim_set_current_win(list_win)
 end
 
 --- Confirma la acción seleccionada: cierra el picker y la ejecuta.
@@ -295,11 +241,6 @@ function M.close()
     state.au_close = nil
   end
 
-  if state.au_filter then
-    pcall(api.nvim_del_autocmd, state.au_filter)
-    state.au_filter = nil
-  end
-
   -- `volt.utils.close` borra el buffer de la lista y lo quita de `volt.events`.
   local list_buf = state.buf_main
   if list_buf and api.nvim_buf_is_valid(list_buf) then
@@ -308,16 +249,12 @@ function M.close()
     end)
   end
 
-  for _, win in ipairs({ state.win_prompt, state.win_preview }) do
-    if win and api.nvim_win_is_valid(win) then
-      pcall(api.nvim_win_close, win, true)
-    end
+  if state.win_preview and api.nvim_win_is_valid(state.win_preview) then
+    pcall(api.nvim_win_close, state.win_preview, true)
   end
 
-  for _, buf in ipairs({ state.buf_prompt, state.buf_preview }) do
-    if buf and api.nvim_buf_is_valid(buf) then
-      pcall(api.nvim_buf_delete, buf, { force = true })
-    end
+  if state.buf_preview and api.nvim_buf_is_valid(state.buf_preview) then
+    pcall(api.nvim_buf_delete, state.buf_preview, { force = true })
   end
 
   -- Devuelve el foco a la ventana de origen.

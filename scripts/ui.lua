@@ -1,5 +1,5 @@
 -- Prueba de la UI del picker de Katana (Volt): ventanas, render, agrupación,
--- filtro en vivo, preview reactivo, confirmación y undo agrupado.
+-- preview reactivo, confirmación y undo agrupado.
 --
 --   nvim --headless -u NONE -l scripts/ui.lua
 --
@@ -71,11 +71,10 @@ window.open(actions, function(action)
 end)
 
 report.check("picker abierto", window.is_open())
-report.check("4 ventanas (original, lista, prompt, preview)", #vim.api.nvim_list_wins() == 4, #vim.api.nvim_list_wins())
+report.check("3 ventanas (original, lista, preview)", #vim.api.nvim_list_wins() == 3, #vim.api.nvim_list_wins())
 report.check("buffer de lista creado", state.buf_main ~= nil and vim.api.nvim_buf_is_valid(state.buf_main))
-report.check("buffer de prompt creado", state.buf_prompt ~= nil and vim.api.nvim_buf_is_valid(state.buf_prompt))
-report.check("prompt en modo prompt", vim.bo[state.buf_prompt].buftype == "prompt", vim.bo[state.buf_prompt].buftype)
-report.check("prompt enfocado", vim.api.nvim_get_current_win() == state.win_prompt)
+report.check("lista enfocada", vim.api.nvim_get_current_win() == state.win_main)
+report.check("sin ventana de filtro", state.win_prompt == nil and state.buf_prompt == nil)
 report.check("buffer de preview creado", state.buf_preview ~= nil and vim.api.nvim_buf_is_valid(state.buf_preview))
 
 --- Texto renderizado por Volt en cada fila.
@@ -205,10 +204,8 @@ local function overlaps(a, b)
   return a[1] < b[1] + b[3] and b[1] < a[1] + a[3] and a[2] < b[2] + b[4] and b[2] < a[2] + a[4]
 end
 
-local rl, rp, rr = rect(state.win_main), rect(state.win_prompt), rect(state.win_preview)
-report.check("lista y prompt no se solapan", not overlaps(rl, rp), vim.inspect({ rl, rp }))
+local rl, rr = rect(state.win_main), rect(state.win_preview)
 report.check("lista y preview no se solapan", not overlaps(rl, rr), vim.inspect({ rl, rr }))
-report.check("prompt y preview no se solapan", not overlaps(rp, rr), vim.inspect({ rp, rr }))
 
 --- Disposición por defecto: el preview va **debajo** de la lista.
 local cfg = require("katana.config").options
@@ -222,6 +219,28 @@ report.check(
   "preview respeta preview_max_height",
   rr[3] <= cfg.preview_max_height,
   string.format("%d <= %d", rr[3], cfg.preview_max_height)
+)
+report.check(
+  "lista con alto acotado (list_max_height)",
+  rl[3] <= cfg.list_max_height,
+  string.format("%d <= %d", rl[3], cfg.list_max_height)
+)
+
+--- Con pantalla de sobra, la lista usa exactamente `list_max_height` filas: el
+--- alto no depende del número de acciones.
+local saved_lines = vim.o.lines
+vim.o.lines = 60
+local big = require("katana.ui.layout").compute()
+vim.o.lines = saved_lines
+report.check(
+  "alto de lista estable en pantalla grande",
+  big.list_height == cfg.list_max_height,
+  string.format("%d == %d", big.list_height, cfg.list_max_height)
+)
+report.check(
+  "preview debajo también con panel máximo",
+  big.preview.row > big.list.row + big.list.height - 1,
+  vim.inspect({ list = big.list, preview = big.preview })
 )
 
 --- El preview hace scroll dentro de su ventana si el diff no cabe.
@@ -253,50 +272,15 @@ local preview_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_preview, 
 report.check("preview con diff", preview_text:find("UNO") ~= nil, preview_text:sub(1, 80))
 report.check("preview con cabeceras unified", preview_text:find("--- a/") ~= nil)
 
---- Filtro en vivo.
-vim.api.nvim_buf_set_lines(state.buf_prompt, 0, 1, false, { "extract" })
-vim.api.nvim_exec_autocmds("TextChangedI", { buffer = state.buf_prompt })
+--- Sin filtro: todas las acciones están siempre en la lista.
 local total_actions = 0
 for _, item in ipairs(state.flat) do
   if item.type == "action" then
     total_actions = total_actions + 1
   end
 end
-report.check("filtro reduce la lista", total_actions == 1, total_actions)
-report.check("fila filtrada correcta", rows_contain("Extract function"))
-
---- Filtro sin resultados.
-vim.api.nvim_buf_set_lines(state.buf_prompt, 0, 1, false, { "zzz" })
-vim.api.nvim_exec_autocmds("TextChangedI", { buffer = state.buf_prompt })
-report.check("filtro sin coincidencias (lista vacía)", #state.flat == 0, #state.flat)
-report.check("placeholder sin resultados", rows_contain("No matching actions"))
-
---- Restablecer el filtro.
-vim.api.nvim_buf_set_lines(state.buf_prompt, 0, 1, false, { "" })
-vim.api.nvim_exec_autocmds("TextChangedI", { buffer = state.buf_prompt })
-report.check("filtro restablecido", #state.flat == 8, #state.flat)
-
---- El prefijo del prompt no debe contar como filtro.
----
---- Neovim guarda la línea del buffer `buftype=prompt` **con el prefijo delante**
---- (`prompt_setprompt`), así que leer la línea cruda da `" > "` con el filtro
---- vacío: ninguna acción coincide y la lista queda en *No matching actions*.
-local prompt_prefix = vim.fn.prompt_getprompt(state.buf_prompt)
-report.check("el prefijo forma parte de la línea", prompt_prefix ~= "", prompt_prefix)
-
-vim.api.nvim_buf_set_lines(state.buf_prompt, 0, 1, false, { prompt_prefix })
-vim.api.nvim_exec_autocmds("TextChangedI", { buffer = state.buf_prompt })
-report.check("prefijo solo (filtro vacío)", state.query == "", string.format("%q", state.query))
-report.check("prefijo solo no filtra", #state.flat == 8, #state.flat)
-
-vim.api.nvim_buf_set_lines(state.buf_prompt, 0, 1, false, { prompt_prefix .. "extract" })
-vim.api.nvim_exec_autocmds("TextChangedI", { buffer = state.buf_prompt })
-report.check("prefijo + texto", state.query == "extract", string.format("%q", state.query))
-report.check("prefijo + texto filtra bien", #state.flat >= 1 and rows_contain("Extract function"))
-
-vim.api.nvim_buf_set_lines(state.buf_prompt, 0, 1, false, { prompt_prefix })
-vim.api.nvim_exec_autocmds("TextChangedI", { buffer = state.buf_prompt })
-report.check("vuelta al filtro vacío", #state.flat == 8, #state.flat)
+report.check("sin filtro: todas las acciones visibles", total_actions == 4, total_actions)
+report.check("la lista no expone ventana de filtro", state.win_prompt == nil)
 
 --- La selección siempre cae en una acción (nunca en una cabecera).
 local function selected_title()
@@ -325,7 +309,7 @@ report.check("un solo `u` revierte la acción", vim.api.nvim_buf_get_lines(bufnr
 
 --- Reapertura: el picker se puede volver a abrir tras cerrarlo.
 window.open(actions, function() end)
-report.check("reapertura del picker", window.is_open() and #vim.api.nvim_list_wins() == 4, #vim.api.nvim_list_wins())
+report.check("reapertura del picker", window.is_open() and #vim.api.nvim_list_wins() == 3, #vim.api.nvim_list_wins())
 window.close()
 report.check("cierre del picker", not window.is_open() and #vim.api.nvim_list_wins() == 1, #vim.api.nvim_list_wins())
 

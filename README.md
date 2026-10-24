@@ -7,21 +7,21 @@ Picker de *code actions* para Neovim (>= 0.10) que reúne, en un único menú:
 - **Proveedores** y **acciones** registradas por el usuario.
 
 A diferencia de un picker plano, Katana mantiene su **UI agrupada por kind**
-(cabeceras de grupo, iconos, atajos numéricos `1`-`9`) y le añade **filtrado en
-vivo** y **previsualización reactiva del diff** de la acción seleccionada.
+(cabeceras de grupo, iconos, atajos numéricos `1`-`9`) y le añade la
+**previsualización reactiva del diff** de la acción seleccionada, debajo de la
+lista y con alto limitado.
 
 La interfaz está construida sobre [Volt](https://github.com/NvChad/volt) (el motor
 de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  > filtrar en vivo                                                  │
-├──────────────────────────────────────────────────────────────────────┤
-│  󰁨  Quick Fix                                                        │
+│  󰁨  Quick Fix ─────────────────────────────────────────────────────   │
 │▎1. 󰁨 insert ';'                                         lsp:clangd   │
 │                                                                      │
-│  󰛹  Refactor: Extract ─────────────────────────────────────────────  │
+│  󰛹  Refactor: Extract ─────────────────────────────────────────────   │
 │ 2. 󰛹 Extract function                                    lsp:clangd   │
+│ 3. 󰛹 Extract variable                                    lsp:clangd   │
 ├──────────────────────────────────────────────────────────────────────┤
 │  --- a/main.c                         ← preview (alto máx. + scroll) │
 │  +++ b/main.c                                                        │
@@ -98,35 +98,28 @@ Si lo tienes en local (`dir = "..."`), cambia la primera entrada por la ruta.
 | `<leader>ca` | Igual que `:CodeActions` (en modo normal y visual) |
 | `<leader>ca` (modo visual) | Usa la selección como rango |
 
-Dentro del picker (la **ventana de filtro** es la que tiene el foco al abrir):
-
-| Tecla | Acción |
-| --- | --- |
-| Escribir | Filtra en vivo (fuzzy) por título, kind y origen |
-| `<C-n>` / `<Down>` / `<Tab>` | Siguiente acción (salta las cabeceras de grupo) |
-| `<C-p>` / `<Up>` / `<S-Tab>` | Acción anterior |
-| `<C-f>` / `<C-b>` | Desplazar el preview (3 líneas abajo / arriba) |
-| `<CR>` | Ejecuta la acción seleccionada y cierra |
-| `<Esc>` / `<C-c>` / `q` | Cierra |
-
-En la **ventana de lista** (modo normal):
+Dentro del picker (la **lista** tiene el foco al abrir, en modo normal):
 
 | Tecla | Acción |
 | --- | --- |
 | `j` / `k` / `<Down>` / `<Up>` | Navegar por las acciones |
+| `<C-n>` / `<C-p>` | Siguiente / anterior (se mantienen por compatibilidad) |
 | `]` / `[` | Saltar al grupo siguiente / anterior |
 | `<C-d>` / `<C-u>` | Desplazar el preview (3 líneas abajo / arriba) |
 | `<CR>` / `<Space>` | Ejecutar la acción seleccionada |
 | `1` … `9` | Ejecutar directamente la acción *n* |
-| `<Tab>` | Volver al prompt para seguir filtrando |
 | `q` / `<Esc>` / `<C-c>` | Cerrar |
 
-El preview aparece **debajo** de la lista (`preview_split = "horizontal"`). Su
+No hay ventana de filtro: la lista muestra siempre todas las acciones.
+
+El preview aparece **debajo** de la lista (`preview_split = "horizontal"`) y su
 alto está limitado por `preview_max_height`: si el diff no cabe, la ventana no
-crece y el contenido se desplaza dentro de ella con `<C-f>`/`<C-b>` (prompt),
-`<C-d>`/`<C-u>` (lista), la rueda del ratón o `j`/`k` con el foco en el preview.
-Se recalcula de forma reactiva al mover la selección y vuelve al principio en
-cada cambio.
+crece y el contenido se desplaza dentro de ella con `<C-d>`/`<C-u>`, la rueda
+del ratón o `j`/`k` con el foco en el preview. Se recalcula de forma reactiva al
+mover la selección y vuelve al principio en cada cambio.
+
+La lista tiene un alto fijo (`list_max_height`, 20 filas): no crece con el
+número de acciones; si hay más, se recorre con `j`/`k`.
 
 ---
 
@@ -142,9 +135,9 @@ require("katana").setup({
   preview_max_height = 12,     -- alto máximo del preview; si el diff es más
                                -- largo, se desplaza dentro de la ventana
   width = 0.85,                -- fracción del ancho del editor
-  height = 0.85,               -- fracción del alto del editor
+  height = 0.85,               -- fracción máxima del alto del editor
+  list_max_height = 20,        -- alto fijo de la lista (filas)
   border = "rounded",          -- estilo de borde de las flotantes
-  prompt = " > ",              -- prompt de la ventana de filtrado (no cuenta como filtro)
 
   -- Aspecto de la fila seleccionada. Por defecto se derivan del tema; fíjalos si
   -- el tema no distingue lo suficiente (mira `selection_color` en `:KatanaDebug`).
@@ -378,14 +371,14 @@ El proveedor usa `vim.treesitter.get_node` (Neovim 0.12) con respaldo a
 ### Volt
 
 - El buffer de la lista contiene **todas** las filas (para poder desplazarse) y
-  la ventana muestra como mucho `max_rows`: al filtrar cambia el número de
-  filas, así que hay que limpiar el namespace (`nvim_buf_clear_namespace`) y
-  redimensionar las líneas en blanco antes de redibujar.
+  la ventana muestra como mucho `max_rows` (el alto fijo `list_max_height`): en
+  cada render se limpia el namespace (`nvim_buf_clear_namespace`) y se
+  redimensionan las líneas en blanco antes de redibujar.
 - El texto de cada fila es `virt_text` (los *marks* de Volt). `volt.draw`
   **elimina el tercer elemento** de cada mark (donde vive la acción del click),
   por lo que las tablas de marks se reconstruyen en cada render.
-- **No** se usa `volt.events.add` para la lista: la navegación y la confirmación
-  se gestionan con keymaps propios para tener control total del flujo.
+- `volt.events.add` se registra **antes** de los keymaps propios: así `<CR>`,
+  `<Space>`, `j`/`k` y los atajos numéricos tienen prioridad sobre los de Volt.
 - `volt.events.enable()` instala un handler global de `vim.on_key` (para el
   soporte de ratón). Es un efecto secundario de Volt que ya afecta a otros
   plugins del ecosistema (menu, minty).
@@ -471,25 +464,15 @@ todo lo que determina el resultado de la petición:
 - los diagnósticos del buffer y los de la línea del cursor,
 - los rangos exactos que se piden al servidor,
 - las acciones que se han recibido,
-- la **fase del picker**: qué acciones llegaron a la lista, cuántas pasaron el
-  filtro y con qué texto, y el error si algo falló al abrirlo.
+- la **fase del picker**: qué acciones llegaron a la lista, cuántas filas se
+  pintaron y el error si algo falló al abrirlo.
 
 Es el primer sitio donde mirar cuando un servidor "no ofrece" nada.
 
 El picker se abre una vez recibida la respuesta del servidor; mientras tanto no
-se muestra la UI. Distinguir los dos casos de `No matching actions` es la clave
-para saber dónde está el problema:
-
-| Lo que muestra la lista | Qué significa |
-| --- | --- |
-| `No matching actions` + filtro vacío | El servidor no devolvió acciones (o todas eran `disabled`) |
-| `No matching actions` + filtro con texto | El filtro está descartando todo: borra el texto (`<C-u>` en el prompt) |
-
-`filtro=` es el texto **sin** el prefijo del prompt. Es importante: Neovim
-guarda los buffers `buftype=prompt` con el prefijo dentro de la línea, así que
-leer la línea cruda daría `" > "` con el filtro vacío y descartaría todas las
-acciones. Si `filtro=` muestra el prefijo (`> `, `>> `, el que tengas
-configurado), es un fallo del plugin, no de tu consulta.
+se muestra la UI. `No matching actions` significa que el servidor no devolvió
+acciones (o todas eran `disabled`): la lista no filtra, así que no puede ser un
+problema de texto.
 
 Si abrir el picker falla, Katana ya **no** se queda en silencio mostrando
 `No matching actions`: avisa con un error y guarda el mensaje, que también
@@ -532,16 +515,15 @@ lua/katana/
 │   └── workspace.lua     -- WorkspaceEdit, codificaciones, undo y diffs
 ├── ui/
 │   ├── window.lua        -- ciclo de vida de las ventanas del picker
-│   ├── layout.lua        -- geometría (lista, prompt y preview)
+│   ├── layout.lua        -- geometría (lista y preview)
 │   ├── list.lua          -- render de la lista con Volt
-│   ├── filter.lua        -- filtrado en vivo fuzzy
-│   ├── mappings.lua      -- keymaps de la lista y del prompt
+│   ├── mappings.lua      -- keymaps de la lista
 │   └── highlights.lua    -- highlights (KatanaSelected, KatanaHeader, MiniIcons*, ...)
 └── preview/
     └── diff.lua          -- previsualización reactiva del diff
 
 plugin/katana.lua         -- carga los comandos de usuario
-scripts/                  -- pruebas headless (smoke, ui, e2e)
+scripts/                  -- pruebas headless (smoke, conformance, ui, icons, e2e)
 ```
 
 ---
@@ -553,7 +535,7 @@ Pruebas headless (no necesitan interfaz):
 ```bash
 nvim --headless -u NONE -l scripts/smoke.lua           # motor (49 comprobaciones)
 nvim --headless -u NONE -l scripts/lsp_conformance.lua # conformidad LSP (11 comprobaciones)
-nvim --headless -u NONE -l scripts/ui.lua              # UI sobre Volt (51 comprobaciones)
+nvim --headless -u NONE -l scripts/ui.lua              # UI sobre Volt (42 comprobaciones)
 nvim --headless -u NONE -l scripts/icons.lua           # iconos y colores (8 comprobaciones)
 nvim --headless -u NONE -l scripts/e2e.lua             # LSP real con clangd (12 comprobaciones)
 ```

@@ -1,12 +1,7 @@
 ---@mod katana.ui.mappings Keymaps del picker
 ---
---- Dos buffers tienen keymaps propios:
----   * la lista (modo normal): navegación, atajos numéricos y confirmación.
----   * el prompt (modo insert): filtrado en vivo, navegación y confirmación.
----
---- El prompt es la ventana activa al abrir el picker: se escribe el filtro y se
---- confirma con `<CR>`. La lista se alcanza con `<Tab>` (desde el prompt) o
---- haciendo clic en ella.
+--- La lista es la única ventana interactiva: navegación (modo normal), scroll del
+--- preview, atajos numéricos y confirmación.
 
 local state = require("katana.state")
 local config = require("katana.config")
@@ -146,6 +141,12 @@ function M.setup_list()
   vim.keymap.set("n", "<Up>", function()
     M.move(-1)
   end, opts)
+  vim.keymap.set("n", "<C-n>", function()
+    M.move(1)
+  end, opts)
+  vim.keymap.set("n", "<C-p>", function()
+    M.move(-1)
+  end, opts)
 
   vim.keymap.set("n", "]", M.next_group, opts)
   vim.keymap.set("n", "[", M.prev_group, opts)
@@ -175,14 +176,6 @@ function M.setup_list()
     require("katana.ui.window").close()
   end, opts)
 
-  -- Vuelve al prompt para seguir filtrando.
-  vim.keymap.set("n", "<Tab>", function()
-    if state.win_prompt and vim.api.nvim_win_is_valid(state.win_prompt) then
-      vim.api.nvim_set_current_win(state.win_prompt)
-      vim.cmd("startinsert!")
-    end
-  end, opts)
-
   if config.options.num_shortcuts then
     for i = 1, 9 do
       vim.keymap.set("n", tostring(i), function()
@@ -202,57 +195,9 @@ function M.select(n)
   apply.run_current()
 end
 
---- Registra los keymaps del buffer del prompt.
-function M.setup_prompt()
-  local buf = state.buf_prompt
-  if not buf then
-    return
-  end
-
-  local opts = { buffer = buf, silent = true, nowait = true }
-
-  vim.keymap.set("i", "<CR>", function()
-    require("katana.ui.window").confirm()
-  end, opts)
-  vim.keymap.set("i", "<C-n>", function()
-    M.move(1)
-  end, opts)
-  vim.keymap.set("i", "<C-p>", function()
-    M.move(-1)
-  end, opts)
-  vim.keymap.set("i", "<Down>", function()
-    M.move(1)
-  end, opts)
-  vim.keymap.set("i", "<Up>", function()
-    M.move(-1)
-  end, opts)
-  vim.keymap.set("i", "<Tab>", function()
-    M.move(1)
-  end, opts)
-  vim.keymap.set("i", "<S-Tab>", function()
-    M.move(-1)
-  end, opts)
-
-  -- Desplazar el preview sin salir del filtro. Se usan <C-f>/<C-b> y **no**
-  -- <C-d>/<C-u> porque en el prompt `<C-u>` borra el filtro escrito.
-  vim.keymap.set("i", "<C-f>", function()
-    preview.scroll(3)
-  end, opts)
-  vim.keymap.set("i", "<C-b>", function()
-    preview.scroll(-3)
-  end, opts)
-  vim.keymap.set("i", "<Esc>", function()
-    require("katana.ui.window").close()
-  end, opts)
-  vim.keymap.set("i", "<C-c>", function()
-    require("katana.ui.window").close()
-  end, opts)
-end
-
 --- Registra todos los keymaps.
 function M.setup()
   M.setup_list()
-  M.setup_prompt()
 end
 
 return M

@@ -88,7 +88,7 @@ end
 ---
 --- El preview tiene un alto máximo (`preview_max_height`); cuando el diff no
 --- cabe, se navega dentro de su ventana con la rueda del ratón, `j`/`k` (si
---- tiene el foco) o estos atajos desde la lista/prompt.
+--- tiene el foco) o estos atajos desde la lista.
 ---@param delta integer líneas a desplazar (positivo = hacia abajo)
 function M.scroll(delta)
   local win = state.win_preview

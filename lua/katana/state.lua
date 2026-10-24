@@ -18,11 +18,6 @@ M.buf_main = nil
 M.win_main = nil
 
 ---@type integer|nil
-M.buf_prompt = nil
----@type integer|nil
-M.win_prompt = nil
-
----@type integer|nil
 M.buf_preview = nil
 ---@type integer|nil
 M.win_preview = nil
@@ -30,7 +25,7 @@ M.win_preview = nil
 --- Todas las acciones recogidas (normalizadas y ordenadas).
 ---@type KatanaAction[]
 M.actions = {}
---- Acciones que pasan el filtro de texto actual.
+--- Acciones que se muestran en la lista (todas; el picker ya no filtra).
 ---@type KatanaAction[]
 M.filtered = {}
 ---@type table[]
@@ -41,8 +36,6 @@ M.flat = {}
 
 ---@type integer
 M.index = 1
----@type string
-M.query = ""
 
 --- Ancho de la lista (columnas de contenido).
 ---@type integer
@@ -62,13 +55,11 @@ M.open = false
 
 ---@type integer|nil
 M.au_close = nil
----@type integer|nil
-M.au_filter = nil
 
 --- Último estado conocido del picker, para `:KatanaDebug`.
 ---
 --- Sobrevive a `reset()`: cuando algo va mal en la fase del picker conviene saber
---- qué recibió y con qué filtro quedó, aunque el picker ya se haya cerrado.
+--- qué recibió y qué llegó a pintarse, aunque el picker ya se haya cerrado.
 ---@type table
 M.last = {}
 
@@ -79,7 +70,6 @@ function M.snapshot(phase)
     phase = phase,
     at = vim.uv.now(),
     open = M.open,
-    query = M.query,
     actions = #M.actions,
     filtered = #M.filtered,
     flat = #M.flat,
@@ -95,18 +85,13 @@ function M.reset()
     M.au_close = nil
   end
 
-  if M.au_filter then
-    pcall(vim.api.nvim_del_autocmd, M.au_filter)
-    M.au_filter = nil
-  end
-
-  for _, w in ipairs({ M.win_main, M.win_prompt, M.win_preview }) do
+  for _, w in ipairs({ M.win_main, M.win_preview }) do
     if w and vim.api.nvim_win_is_valid(w) then
       pcall(vim.api.nvim_win_close, w, true)
     end
   end
 
-  for _, b in ipairs({ M.buf_main, M.buf_prompt, M.buf_preview }) do
+  for _, b in ipairs({ M.buf_main, M.buf_preview }) do
     if b and vim.api.nvim_buf_is_valid(b) then
       pcall(vim.api.nvim_buf_delete, b, { force = true })
     end
@@ -118,8 +103,6 @@ function M.reset()
 
   M.buf_main = nil
   M.win_main = nil
-  M.buf_prompt = nil
-  M.win_prompt = nil
   M.buf_preview = nil
   M.win_preview = nil
 
@@ -128,7 +111,6 @@ function M.reset()
   M.groups = {}
   M.flat = {}
   M.index = 1
-  M.query = ""
   M.on_select = nil
   M.open = false
 end

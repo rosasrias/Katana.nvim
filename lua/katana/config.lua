@@ -4,10 +4,10 @@ local M = {}
 ---@field preview boolean Muestra el panel de previsualización del diff
 ---@field preview_split '"vertical"'|'"horizontal"' Orientación del preview
 ---@field preview_max_height integer Alto máximo del preview (filas); el resto se scrollea
+---@field list_max_height integer Alto fijo de la lista de acciones (filas)
 ---@field width number Fracción del ancho del editor ocupada por el picker
 ---@field height number Fracción del alto del editor ocupada por el picker
 ---@field border string Estilo del borde de las ventanas flotantes
----@field prompt string Prompt del filtro en vivo (el prefijo no cuenta como filtro)
 ---@field show_server_name boolean Muestra el origen de la acción
 ---@field show_preferred boolean Marca las acciones `isPreferred`
 ---@field num_shortcuts boolean Muestra los atajos numéricos
@@ -37,12 +37,14 @@ M.defaults = {
   -- defecto); "vertical" lo pone a la derecha.
   preview_split = "horizontal",
   -- Alto máximo del preview en filas. Si el diff es más largo, la ventana no
-  -- crece: el contenido se desplaza dentro de ella (rueda del ratón,
-  -- `<C-f>`/`<C-b>` en el prompt o `<C-d>`/`<C-u>` en la lista).
+  -- crece: el contenido se desplaza dentro de ella (rueda del ratón o
+  -- `<C-d>`/`<C-u>` en la lista).
   preview_max_height = 12,
+  -- Alto fijo de la lista de acciones, en filas. No crece con el número de
+  -- acciones: si hay más, se recorre dentro de la ventana con `j`/`k`.
+  list_max_height = 20,
   width = 0.85,
   height = 0.85,
-  prompt = " > ",
   show_server_name = true,
   show_preferred = true,
   num_shortcuts = true,

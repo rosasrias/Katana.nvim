@@ -119,19 +119,13 @@ function M.collect(opts)
   end
 
   --------------------------------------------------------- fase del picker
-  -- Lo que realmente llegó a pintarse: si `filtered` es 0 pero `actions` no,
-  -- el problema está en el filtro (p. ej. texto colado en el prompt).
   local state = require("katana.state")
   local last = state.last or {}
 
   add("")
   add("  picker:")
   add("    fase: %s", tostring(last.phase or "(nunca se abrió)"))
-  add(
-    "    abierto=%s  filtro=%q",
-    tostring(last.open),
-    tostring(last.query or "")
-  )
+  add("    abierto=%s", tostring(last.open))
   add(
     "    acciones=%s  filtradas=%s  filas=%s",
     tostring(last.actions),
@@ -161,11 +155,10 @@ function M.collect(opts)
 
   if state.open then
     add(
-      "    (ahora mismo) acciones=%d  filtradas=%d  filas=%d  filtro=%q",
+      "    (ahora mismo) acciones=%d  filtradas=%d  filas=%d",
       #state.actions,
       #state.filtered,
-      #state.flat,
-      state.query
+      #state.flat
     )
   end
 

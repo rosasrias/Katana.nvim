@@ -37,7 +37,7 @@ nvim --headless -u NONE -l scripts/icons.lua
 nvim --headless -u NONE -l scripts/e2e.lua
 ```
 
-Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 11 + 51 +
+Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 11 + 42 +
 8 + 12 comprobaciones). Si `Volt` (dependencia de la UI) o `clangd` no están
 disponibles, los scripts lo indican con `SKIP` y terminan sin errores. Volt se
 busca en el `runtimepath` y en las rutas habituales de lazy.nvim; se puede
@@ -87,41 +87,37 @@ print(greet("mundo"))
 
 | Paso | Resultado esperado |
 | --- | --- |
-| Cursor sobre `unused` → `<leader>ca` (o `:CodeActions`) | Se abre el picker (lista + prompt + preview) |
+| Cursor sobre `unused` → `<leader>ca` (o `:CodeActions`) | Se abre el picker (lista + preview) |
 | La lista muestra cabeceras de grupo (`Quick Fix`, `Refactor: Extract`, ...) | Una cabecera por kind, en el orden de `group_order` |
 | Cada acción muestra icono, título, atajo numérico y origen (`lsp:lua_ls`) | Textos legibles, fila seleccionada resaltada |
 | El preview aparece **debajo** de la lista | Borde propio con título ` Preview ` y `--- a/...` / `+++ b/...` |
-| Con un diff más largo que `preview_max_height` | El panel **no** crece: el contenido se desplaza dentro (rueda, `<C-f>`/`<C-b>` o `<C-d>`/`<C-u>` en la lista) |
+| Con un diff más largo que `preview_max_height` | El panel **no** crece: el contenido se desplaza dentro (rueda o `<C-d>`/`<C-u>`) |
+| Con muchas acciones (> `list_max_height`) | La lista mantiene su alto (20 filas por defecto) y se recorre con `j`/`k` |
 
 Diagnóstico: si el picker no abre, comprueba `:messages`; si abre vacío,
 `lua_ls` no devolvió acciones (es normal, ver el aviso de 2.1).
 
-### 2.3 Filtrado en vivo
+### 2.3 Sin filtro
+
+La lista muestra siempre todas las acciones recibidas: no hay ventana de
+filtro ni texto que pueda dejar la lista vacía.
 
 | Paso | Resultado esperado |
 | --- | --- |
-| Escribir `rem` | La lista se reduce a las acciones que coinciden (fuzzy por título/kind/origen) |
-| Escribir `zzz` (sin coincidencias) | La lista queda vacía y aparece *No matching actions* |
-| Borrar el texto | Vuelven todas las acciones, con la selección en la primera |
+| Abrir el picker | El foco está en la lista (modo normal), sin prompt |
+| Teclear caracteres sueltos | No filtran: `q` cierra, `1`-`9` ejecutan, el resto no hace nada |
+| `j` / `k` | La selección recorre todas las acciones y salta las cabeceras |
 
-Diagnóstico: si el filtro no responde, el evento `TextChangedI` no está
-disparando → comprobar `vim.bo[buf].buftype == "prompt"` en la ventana de
-filtrado.
-
-Diagnóstico: *No matching actions* sólo significa "la lista filtrada está
-vacía". La causa habitual es que la línea del prompt incluya el prefijo: Neovim
-guarda los buffers `buftype=prompt` con el prefijo *dentro* de la línea, así que
-leerla cruda da `" > "` con el filtro vacío y ninguna acción coincide. El filtro
-debe aplicarse sobre el texto **sin** el prefijo (`prompt_getprompt`); el informe
-de `:KatanaDebug` muestra en `filtro=` lo que se está aplicando de verdad.
+Diagnóstico: si aparece *No matching actions*, el servidor no devolvió
+acciones (o todas eran `disabled`); revisar `:KatanaDebug`.
 
 ### 2.4 Previsualización reactiva
 
 | Paso | Resultado esperado |
 | --- | --- |
-| `<C-n>` / `<Down>` | Cambia la fila seleccionada y **el diff de abajo se actualiza** |
+| `j` / `<Down>` | Cambia la fila seleccionada y **el diff de abajo se actualiza** |
 | Moverse sobre una acción sin cambios | El panel indica que no produce cambios (título, origen, kind) |
-| `<C-p>` / `<Up>` | Vuelve a la anterior y el diff se regenera |
+| `k` / `<Up>` | Vuelve a la anterior y el diff se regenera |
 | `]` / `[` | Salta al grupo siguiente / anterior |
 | Cambiar de selección tras hacer scroll | El preview vuelve a empezar por arriba (`gg`) |
 
@@ -223,14 +219,11 @@ apareciendo. Se puede desactivar con `pull_diagnostics = false`.
 
 Si aun así no aparece, `:KatanaDebug` imprime el informe completo de la
 petición: clientes LSP conectados, diagnósticos, rangos pedidos, acciones
-recibidas y estado del picker (acciones que llegaron a la lista, cuántas pasan
-el filtro, con qué texto y el error si falló al abrirse).
+recibidas y estado del picker (acciones que llegaron a la lista, cuántas filas
+se pintaron y el error si falló al abrirse).
 
-Distinción rápida según lo que muestre la lista:
-
-- `No matching actions` con el filtro vacío → el servidor no devolvió nada.
-- `No matching actions` con texto en el filtro → el filtro lo descarta todo
-  (`<C-u>` en el prompt lo limpia).
+`No matching actions` significa que el servidor no devolvió nada: la lista no
+filtra, así que no puede deberse al texto escrito.
 
 ### 2.9 Configurar `roslyn_ls` en Neovim
 
@@ -346,7 +339,7 @@ comas.
 | Buffer sin servidor LSP | El picker muestra las acciones de Tree-sitter / registradas; si no hay ninguna, aviso "no code actions found" |
 | Terminal estrecho (< 60 columnas) | El panel de previsualización se omite; el picker sigue usable |
 | `<C-c>` / `<Esc>` / `q` | Cierra el picker y devuelve el foco al buffer original |
-| Abrir el picker dos veces seguidas | No quedan ventanas huérfanas ni buffers filtrados (`:ls` limpio) |
+| Abrir el picker dos veces seguidas | No quedan ventanas huérfanas ni buffers de trabajo (`:ls` limpio) |
 | Acción que falla (p. ej. un servidor que devuelve basura) | `vim.notify` a nivel ERROR, sin excepción no capturada |
 | `codeAction/resolve` que no responde | Aviso de timeout a los 5 s, sin bloquear la interfaz |
 | Acción deshabilitada (`disabled`) | Se muestra en gris (`KatanaDisabled`) y al confirmarla avisa sin aplicarse |
@@ -378,7 +371,8 @@ llevaba la lista `diagnostics` ausente.
 
 - [ ] `:CodeActions` abre el picker con la lista agrupada por kind
 - [ ] Las cabeceras de grupo aparecen en el orden configurado
-- [ ] El filtrado en vivo reduce la lista y se puede vaciar
+- [ ] La lista tiene alto fijo (`list_max_height`) y se recorre con `j`/`k`
+- [ ] No hay ventana ni texto de filtro: la lista muestra todas las acciones
 - [ ] El diff del panel inferior es correcto y reactivo
 - [ ] Con un diff largo, el preview scrollea sin crecer por encima de `preview_max_height`
 - [ ] Un `u` deshace únicamente la acción
@@ -389,8 +383,7 @@ llevaba la lista `diagnostics` ausente.
 - [ ] `roslyn_ls` ofrece *Generar método "Suma"* aunque el buffer todavía no tenga diagnósticos publicados (*pull*)
 - [ ] En modo visual, las acciones corresponden a la **selección actual** (no a la anterior)
 - [ ] `:KatanaDebug` muestra clientes, diagnósticos, rangos, acciones de la petición y el estado del picker
-- [ ] Con el filtro vacío la lista nunca dice *No matching actions* si el servidor devolvió acciones
-- [ ] El prefijo del prompt no cuenta como texto del filtro (`filtro=` vacío con el prompt vacío)
+- [ ] La lista nunca dice *No matching actions* si el servidor devolvió acciones
 - [ ] Si algo falla al abrir el picker, sale un error en vez de quedarse en *No matching actions*
 - [ ] La fila seleccionada tiene fondo propio y barra `▎`, y se distinguen del fondo de la flotante
 - [ ] El icono conserva su color por kind también en la fila seleccionada
