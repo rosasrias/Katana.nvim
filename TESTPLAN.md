@@ -92,7 +92,7 @@ print(greet("mundo"))
 | Cada acción muestra icono, título, atajo numérico y origen (`lsp:lua_ls`) | Textos legibles, fila seleccionada resaltada |
 | El preview aparece **debajo** de la lista | Borde propio con título ` Preview ` y `--- a/...` / `+++ b/...` |
 | Con un diff más largo que `preview_max_height` | El panel **no** crece: el contenido se desplaza dentro (rueda o `<C-d>`/`<C-u>`) |
-| Con muchas acciones (> `list_max_height`) | La lista mantiene su alto (20 filas por defecto) y se recorre con `j`/`k` |
+| Con muchas acciones (> `list_max_height`) | La lista mantiene su alto (10 filas por defecto) y se recorre con `j`/`k` |
 
 Diagnóstico: si el picker no abre, comprueba `:messages`; si abre vacío,
 `lua_ls` no devolvió acciones (es normal, ver el aviso de 2.1).

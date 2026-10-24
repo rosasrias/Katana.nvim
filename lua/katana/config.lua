@@ -42,7 +42,7 @@ M.defaults = {
   preview_max_height = 12,
   -- Alto fijo de la lista de acciones, en filas. No crece con el número de
   -- acciones: si hay más, se recorre dentro de la ventana con `j`/`k`.
-  list_max_height = 20,
+  list_max_height = 10,
   width = 0.85,
   height = 0.85,
   show_server_name = true,

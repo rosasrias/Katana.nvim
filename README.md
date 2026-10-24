@@ -118,7 +118,7 @@ crece y el contenido se desplaza dentro de ella con `<C-d>`/`<C-u>`, la rueda
 del ratón o `j`/`k` con el foco en el preview. Se recalcula de forma reactiva al
 mover la selección y vuelve al principio en cada cambio.
 
-La lista tiene un alto fijo (`list_max_height`, 20 filas): no crece con el
+La lista tiene un alto fijo (`list_max_height`, 10 filas): no crece con el
 número de acciones; si hay más, se recorre con `j`/`k`.
 
 ---
@@ -136,7 +136,7 @@ require("katana").setup({
                                -- largo, se desplaza dentro de la ventana
   width = 0.85,                -- fracción del ancho del editor
   height = 0.85,               -- fracción máxima del alto del editor
-  list_max_height = 20,        -- alto fijo de la lista (filas)
+  list_max_height = 10,        -- alto fijo de la lista (filas)
   border = "rounded",          -- estilo de borde de las flotantes
 
   -- Aspecto de la fila seleccionada. Por defecto se derivan del tema; fíjalos si
