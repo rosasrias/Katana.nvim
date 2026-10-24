@@ -74,12 +74,14 @@ function M.rows(limit)
       -- grupo se reconozca de un vistazo.
       local icon, icon_hl = action_icon({ kind = group.key })
 
+      -- La cabecera también empieza en la primera columna: no hay margen a la
+      -- izquierda (ni hueco ni barra) delante del icono ni de los números.
+      local prefix = icon .. "  "
+      local used = vim.fn.strwidth(prefix) + vim.fn.strwidth(label) + 1
       rows[#rows + 1] = {
-        { " ", "Normal" },
-        { "  ", "Normal" },
-        { icon .. "  ", icon_hl },
+        { prefix, icon_hl },
         { label, "KatanaHeader" },
-        { " " .. string.rep("─", math.max(0, (state.list_width or 40) - #label - 9)), "KatanaSeparator" },
+        { " " .. string.rep("─", math.max(0, (state.list_width or 40) - used)), "KatanaSeparator" },
       }
     elseif item.type == "action" then
       local action = item.action
@@ -127,16 +129,16 @@ function M.rows(limit)
       local pref_hl = selected and "KatanaSelectedPreferred" or "KatanaPreferred"
       local gap_hl = selected and "KatanaRow" or "Normal"
 
-      -- La fila activa se distingue por el color del texto (azul) y el fondo;
-      -- no hay barra ni glifo de selector a la izquierda. La sangría de una
-      -- columna mantiene alineadas las acciones con las cabeceras.
+      -- La fila empieza en el número: no hay nada a su izquierda (ni sangría,
+      -- ni barra, ni glifo). La fila activa se distingue por el color del texto
+      -- (azul) y el fondo.
       local marks = {
-        { " ", gap_hl },
         { num_str, num_hl },
         { " ", gap_hl },
         { icon .. " ", hls.selected_hl_for(hl_icon, selected) },
         { title, title_hl },
       }
+      local title_mark = marks[4]
 
       if source_str ~= "" then
         table.insert(marks, { source_str, source_hl })
@@ -160,7 +162,7 @@ function M.rows(limit)
 
       -- El tercer elemento de un mark es la acción del click. `volt.draw` lo
       -- elimina tras usarlo, por eso las filas se construyen de nuevo cada vez.
-      marks[5][3] = {
+      title_mark[3] = {
         click = function()
           state.index = i
           require("katana.ui.list").update_selection()
@@ -242,9 +244,14 @@ function M.render()
 end
 
 --- Coloca el cursor de la ventana de lista en la fila activa.
+---
+--- La columna va al final de la fila (el relleno del fondo), nunca a la
+--- izquierda de los números: así el cursor no deja una raya junto al número ni
+--- se superpone a él.
 function M.sync_cursor()
   if state.win_main and api.nvim_win_is_valid(state.win_main) then
-    pcall(api.nvim_win_set_cursor, state.win_main, { state.index, 0 })
+    local col = math.max(0, (state.list_width or 1) - 1)
+    pcall(api.nvim_win_set_cursor, state.win_main, { state.index, col })
   end
 end
 

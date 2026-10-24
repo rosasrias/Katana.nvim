@@ -59,7 +59,8 @@ function M.compute()
     local top = math.max(1, math.floor((vim.o.lines - used_height) / 2))
 
     return {
-      list_width = total_width - 4, -- bordes laterales + padding de Volt
+      -- Sin relleno a la izquierda: el texto empieza en la primera columna.
+      list_width = total_width - 2,
       list_height = list_height,
       preview_width = total_width - 2,
       preview_height = preview_height,

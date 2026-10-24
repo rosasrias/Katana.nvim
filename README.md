@@ -16,12 +16,12 @@ de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  󰁨  Quick Fix ─────────────────────────────────────────────────────   │
-│ 1. 󰁨 insert ';'                                         lsp:clangd   │
+│󰁨  Quick Fix ───────────────────────────────────────────────────────  │
+│1. 󰁨 insert ';'                                          lsp:clangd   │
 │                                                                      │
-│  󰛹  Refactor: Extract ─────────────────────────────────────────────   │
-│ 2. 󰛹 Extract function                                    lsp:clangd   │
-│ 3. 󰛹 Extract variable                                    lsp:clangd   │
+│󰛹  Refactor: Extract ───────────────────────────────────────────────  │
+│2. 󰛹 Extract function                                     lsp:clangd   │
+│3. 󰛹 Extract variable                                     lsp:clangd   │
 ├──────────────────────────────────────────────────────────────────────┤
 │  --- a/main.c                         ← preview (alto máx. + scroll) │
 │  +++ b/main.c                                                        │
@@ -45,9 +45,12 @@ de UI del ecosistema NvChad): no se usa Telescope, snacks ni fzf-lua.
   tema y, si queda demasiado cerca del fondo de la flotante, se separa
   automáticamente. Se puede fijar con `selection_color` (fondo) y
   `selection_accent` (azul del texto seleccionado).
+- **Sin margen izquierdo**: la fila empieza directamente en el número (nada de
+  sangría, barra ni glifo a su izquierda).
 - El **cursor no se dibuja** dentro del picker (se usa un `guicursor` con el
-  fondo de la fila activa y se restaura al cerrar), para que no aparezca una
-  raya junto al número. La posición se sigue con el texto azul.
+  fondo de la fila activa y se restaura al cerrar) y se coloca al final de la
+  fila, de modo que no aparece una raya junto al número. La posición se sigue
+  con el texto azul.
 - Las **cabeceras de grupo** van en azul con una regla horizontal que rellena el
   ancho de la lista.
 

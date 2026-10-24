@@ -142,7 +142,7 @@ function M.open(actions, on_select)
     {
       buf = list_buf,
       ns = state.ns_main,
-      xpad = 2,
+      xpad = 0,
       layout = {
         {
           name = "katana_actions",

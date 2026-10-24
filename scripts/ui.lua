@@ -105,6 +105,16 @@ local function rows_text()
   return rows
 end
 
+--- Sin margen a la izquierda: la fila empieza en el número.
+local all_rows = rows_text()
+report.check("la fila empieza en el número", (all_rows[2] or ""):sub(1, 2) == "1.", string.format("%q", (all_rows[2] or ""):sub(1, 8)))
+report.check("la cabecera no lleva margen", (all_rows[1] or ""):sub(1, 1) ~= " ", string.format("%q", (all_rows[1] or ""):sub(1, 8)))
+report.check(
+  "el cursor no queda junto al número",
+  vim.api.nvim_win_get_cursor(state.win_main)[2] > 0,
+  vim.api.nvim_win_get_cursor(state.win_main)[2]
+)
+
 local function rows_contain(needle)
   for _, text in ipairs(rows_text()) do
     if text and text:find(needle, 1, true) then
