@@ -8,6 +8,8 @@
 --- Si `mini.icons` no está disponible, se usan los glifos de `config.options.icons`
 --- con los colores `Katana*` de siempre.
 
+local color = require("katana.ui.color")
+
 local M = {}
 
 --- Kind de code action -> kind de LSP de mini.icons.
@@ -52,21 +54,7 @@ M.color_fallbacks = {
 ---@param hex string|nil
 ---@return number|nil
 function M.luma(hex)
-  if type(hex) ~= "string" then
-    return nil
-  end
-
-  local r, g, b = hex:match("^#(%x%x)(%x%x)(%x%x)$")
-  if not r then
-    return nil
-  end
-
-  local function channel(c)
-    local v = tonumber(c, 16) / 255
-    return v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4
-  end
-
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+  return color.luma(hex)
 end
 
 --- Colores por debajo de esta luminancia son ilegibles sobre el fondo oscuro

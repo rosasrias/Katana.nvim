@@ -12,6 +12,8 @@
 --- en ese caso la acción queda marcada como resuelta y el executor lo notifica
 --- como fallo, en vez de fingir que no había nada que hacer.
 
+local optional = require("katana.core.optional")
+
 local M = {}
 
 ---@class KatanaResolveState
@@ -108,7 +110,7 @@ function M.resolve_single(action, cb)
     return
   end
 
-  if action.edit ~= nil or action.command ~= nil then
+  if optional.value(action.edit) ~= nil or optional.value(action.command) ~= nil then
     action._resolved = true
     if cb then
       cb(action, action._resolve_error)
@@ -175,7 +177,9 @@ function M.resolve_batch(actions, limit)
       break
     end
 
-    local needs_resolve = type(action.resolve_fn) == "function" and not action.edit and not action.command
+    local needs_resolve = type(action.resolve_fn) == "function"
+      and optional.value(action.edit) == nil
+      and optional.value(action.command) == nil
 
     if needs_resolve then
       local state = type(action._katana_resolve) == "table" and action._katana_resolve or nil

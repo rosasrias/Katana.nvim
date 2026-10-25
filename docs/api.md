@@ -44,6 +44,9 @@ frontera de entrada y aceptan `run` o `execute_fn` (gana este último).
 - `variants` KatanaAction[]|nil
 - `id` string|number|nil
 
+Los campos opcionales que el servidor envía como `null` se normalizan a `nil`
+(«ausente»). Un `isPreferred` nulo es `false`; `false` y `0` reales se conservan.
+
 ## Identidad y deduplicación
 
 `dedupe` fusiona acciones sólo cuando coinciden `title`, `kind` **y** payload
@@ -97,6 +100,10 @@ intenta revertir lo ya escrito de forma verificada.
   snapshot. Si no se puede verificar, el resultado es `partial` con
   `rollback = "failed"`.
 - El undo agrupado es por buffer: un `u` por cada buffer modificado.
+- Los campos opcionales que llegan como `null` JSON (`vim.NIL`) se interpretan
+  como ausentes en la frontera de entrada (`core/optional.lua`): una
+  `textDocument.version`, un `kind` de `documentChanges` o un `edit` nulo no
+  invalidan la edición ni borran datos ya conocidos. `false` y `0` se conservan.
 
 ## UI
 

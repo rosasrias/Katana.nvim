@@ -12,7 +12,9 @@
 --     y peticiones coalescidas,
 --   * normalización de acciones registradas y de proveedores (`run` y
 --     `execute_fn`),
---   * selección del cliente LSP para `workspace/executeCommand`.
+--   * selección del cliente LSP para `workspace/executeCommand`,
+--   * campos opcionales presentes como `null` JSON (`vim.NIL`) tratados como
+--     ausentes en la normalización, el WorkspaceEdit y la resolución.
 
 local script = debug.getinfo(1, "S").source:sub(2)
 local dir = vim.fn.fnamemodify(script, ":p:h")
@@ -721,5 +723,127 @@ end
 local e1 = { title = "Exec", kind = "source", source = "user:a", execute_fn = make_exec() }
 local e2 = { title = "Exec", kind = "source", source = "user:b", execute_fn = make_exec() }
 report.check("dedupe conserva execute_fn distintos", #prioritize.filter_and_sort({ e1, e2 }) == 2)
+
+--------------------------------------------------------------------------------
+-- 10. JSON null (vim.NIL) en campos opcionales
+--------------------------------------------------------------------------------
+--
+-- Los servidores envían `null` para campos opcionales; `vim.json.decode` lo
+-- convierte en `vim.NIL` (truthy). El executor debe interpretarlo como ausente.
+
+local p7 = temp_file("null-fields.txt", { "nulo" })
+local b7 = load(p7)
+
+local null_version = {
+  documentChanges = {
+    {
+      kind = vim.NIL,
+      textDocument = { uri = uri(p7), version = vim.NIL },
+      edits = {
+        { range = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 4 } }, newText = "NULO" },
+      },
+    },
+  },
+}
+local null_plan, null_err = workspace.prepare_edit(null_version, b7, "utf-8")
+report.check("versión null se trata como ausente", null_plan ~= nil, null_err)
+report.check("kind null se ignora", null_plan ~= nil and #null_plan.groups == 1, null_err)
+local null_applied = null_plan and workspace.apply_plan(null_plan)
+report.check("edición con campos null se aplica", null_applied == true and lines(b7)[1] == "NULO", lines(b7)[1])
+
+local null_document_changes = {
+  documentChanges = vim.NIL,
+  changes = {
+    [uri(p7)] = {
+      { range = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 4 } }, newText = "NULL" },
+    },
+  },
+}
+local fallback_plan, fallback_err = workspace.prepare_edit(null_document_changes, b7, "utf-8")
+report.check("documentChanges null permite usar changes", fallback_plan ~= nil, fallback_err)
+local fallback_ok = fallback_plan and workspace.apply_plan(fallback_plan)
+report.check("changes se aplica tras documentChanges null", fallback_ok == true and lines(b7)[1] == "NULL", lines(b7)[1])
+
+local action_module = require("katana.core.action")
+local null_action, null_action_err = action_module.normalize({
+  title = "Nulls",
+  source = "user:test",
+  kind = vim.NIL,
+  edit = vim.NIL,
+  command = vim.NIL,
+  resolve_fn = vim.NIL,
+  execute_fn = vim.NIL,
+  run = vim.NIL,
+  data = vim.NIL,
+  diagnostics = vim.NIL,
+  disabled = vim.NIL,
+  isPreferred = vim.NIL,
+  id = vim.NIL,
+  client_id = vim.NIL,
+  encoding = vim.NIL,
+  variants = vim.NIL,
+  priority = vim.NIL,
+})
+report.check("acción con campos null se normaliza", null_action ~= nil, null_action_err)
+report.check(
+  "los campos null quedan ausentes",
+  null_action
+    and null_action.kind == nil
+    and null_action.edit == nil
+    and null_action.command == nil
+    and null_action.data == nil
+    and null_action.diagnostics == nil
+    and null_action.disabled == nil
+    and null_action.isPreferred == false,
+  null_action and vim.inspect(null_action)
+)
+report.check("una acción con sólo nulls no tiene efectos", not action_module.has_effect(null_action))
+report.check("validate_edit acepta null como ausente", apply.validate_edit(vim.NIL) == true)
+
+local fetch = require("katana.core.fetch")
+local null_client = {
+  name = "nulls",
+  id = 707,
+  offset_encoding = "utf-8",
+  supports_method = function(_, method)
+    return method == "codeAction/resolve"
+  end,
+  request = function(_, method, _, callback)
+    if method == "codeAction/resolve" then
+      callback(nil, { edit = vim.NIL, command = vim.NIL, data = vim.NIL, isPreferred = vim.NIL })
+    end
+  end,
+}
+local lsp_actions = fetch.normalize_lsp_actions({
+  {
+    title = "Null LSP",
+    kind = vim.NIL,
+    edit = vim.NIL,
+    command = vim.NIL,
+    data = { id = 1 },
+    diagnostics = vim.NIL,
+    isPreferred = vim.NIL,
+    disabled = vim.NIL,
+  },
+}, null_client, { bufnr = b7, encoding = "utf-8", diagnostics = {} })
+report.check("acción LSP con nulls se normaliza", #lsp_actions == 1, #lsp_actions)
+
+local lsp_action = lsp_actions[1]
+local existing_edit = { changes = {} }
+local resolve_done = false
+if lsp_action then
+  lsp_action.edit = existing_edit
+end
+if lsp_action and lsp_action.resolve_fn then
+  lsp_action.resolve_fn(function(resolved, resolve_err)
+    resolve_done = true
+    report.check("resolve null no devuelve error", resolve_err == nil, resolve_err)
+    report.check("resolve null conserva el edit existente", resolved.edit == existing_edit)
+    report.check("resolve null no deja command", resolved.command == nil)
+    report.check("resolve null conserva el data existente", type(resolved.data) == "table" and resolved.data.id == 1)
+    report.check("resolve null no marca preferred", resolved.isPreferred == false)
+  end)
+end
+report.check("resolve_fn de una acción con data se ejecuta", resolve_done)
 
 report.finish()

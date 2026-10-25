@@ -566,25 +566,43 @@ lua/katana/
 ├── plugin.lua            -- comandos (:CodeActions, :KatanaSource, :KatanaDebug) y atajo
 ├── state.lua             -- estado del picker abierto (buffers, ventanas, filas)
 ├── register.lua          -- acciones registradas por el usuario
-├── apply.lua             -- executor: resultados, notificaciones y rollback
+├── apply.lua             -- fachada del executor
+├── apply/                -- executor por responsabilidades (edit, command, run, pipeline, execute)
 ├── utils.lua             -- labels, grupos por kind y títulos compactos
 ├── core/
 │   ├── action.lua        -- contrato normalizado KatanaAction
-│   ├── fetch.lua         -- recogida de acciones (LSP, proveedores, TS, registradas)
-│   ├── prioritize.lua    -- priorización, ordenación y deduplicación
+│   ├── optional.lua      -- frontera de `nil`/`vim.NIL` para campos JSON opcionales
+│   ├── fetch.lua         -- fachada del motor de recogida de acciones
+│   ├── fetch/            -- generación, contexto, diagnósticos, rangos, normalización, petición y orquestación
+│   ├── prioritize.lua    -- fachada de priorización
+│   ├── prioritize/       -- ranking (orden) e identity (deduplicación)
 │   ├── group.lua         -- agrupación por kind (cabeceras y orden de grupos)
 │   ├── resolve.lua       -- codeAction/resolve por lotes
 │   ├── providers.lua     -- registro de proveedores
 │   ├── debug.lua         -- informe de diagnóstico (:KatanaDebug)
 │   └── treesitter.lua    -- proveedor basado en Tree-sitter
 ├── lsp/
-│   └── workspace.lua     -- WorkspaceEdit, codificaciones, undo y diffs
+│   ├── workspace.lua     -- fachada de WorkspaceEdit, codificaciones, undo y diffs
+│   ├── encoding.lua      -- conversión de posiciones utf-8/16/32
+│   ├── uri.lua           -- URIs y rutas locales
+│   ├── workspace_edit.lua-- extracción/validación estructural del WorkspaceEdit
+│   ├── buffer.lua        -- resolución de buffers y undo
+│   ├── edit_validation.lua -- validación de rangos y solapamientos
+│   ├── text_edit.lua     -- aplicación de TextEdit (preview y buffer)
+│   ├── edit_plan.lua     -- preparación sin efectos
+│   ├── edit_apply.lua    -- aplicación y rollback verificado
+│   └── diff.lua          -- diffs de la previsualización
 ├── ui/
-│   ├── window.lua        -- ciclo de vida de las ventanas del picker
+│   ├── window.lua        -- fachada del ciclo de vida y la selección del picker
+│   ├── window/           -- lifecycle (apertura), teardown (cierre), guicursor
 │   ├── layout.lua        -- geometría (lista y preview)
 │   ├── list.lua          -- render de la lista con Volt
+│   ├── list/rows.lua     -- construcción de filas (marks)
 │   ├── mappings.lua      -- keymaps de la lista
-│   └── highlights.lua    -- highlights (KatanaSelected, KatanaHeader, MiniIcons*, ...)
+│   ├── highlights.lua    -- highlights (KatanaSelected, KatanaHeader, MiniIcons*, ...)
+│   ├── theme.lua         -- paleta del tema y fondo de selección
+│   ├── color.lua         -- utilidades puras de color (rgb, shade, contraste, luma)
+│   └── icons.lua         -- iconos de mini.icons con respaldo
 └── preview/
     └── diff.lua          -- previsualización reactiva del diff
 
@@ -601,7 +619,7 @@ Pruebas headless (no necesitan interfaz):
 ```bash
 nvim --headless -u NONE -l scripts/smoke.lua           # motor (49 comprobaciones)
 nvim --headless -u NONE -l scripts/lsp_conformance.lua # conformidad LSP (26 comprobaciones)
-nvim --headless -u NONE -l scripts/apply.lua           # executor y WorkspaceEdit (74 comprobaciones)
+nvim --headless -u NONE -l scripts/apply.lua           # executor y WorkspaceEdit (90 comprobaciones)
 nvim --headless -u NONE -l scripts/ui.lua              # UI sobre Volt (74 comprobaciones)
 nvim --headless -u NONE -l scripts/icons.lua           # iconos y colores (8 comprobaciones)
 nvim --headless -u NONE -l scripts/e2e.lua             # LSP real con clangd (12 comprobaciones)

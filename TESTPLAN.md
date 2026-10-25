@@ -38,7 +38,7 @@ nvim --headless -u NONE -l scripts/icons.lua
 nvim --headless -u NONE -l scripts/e2e.lua
 ```
 
-Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 26 + 74 +
+Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 26 + 90 +
 74 + 8 + 12 comprobaciones). Si `Volt` (dependencia de la UI) o `clangd` no
 están disponibles, los scripts lo indican con `SKIP` y terminan sin errores.
 Volt se busca en el `runtimepath` y en las rutas habituales de lazy.nvim; se
@@ -379,7 +379,7 @@ llevaba la lista `diagnostics` ausente.
 
 ## 7. Integridad del `WorkspaceEdit` y contrato de resultados
 
-Estos casos se comprueban sin GUI con `scripts/apply.lua` (74 comprobaciones).
+Estos casos se comprueban sin GUI con `scripts/apply.lua` (90 comprobaciones).
 También se pueden reproducir desde el picker con un servidor que devuelva
 ediciones multi-fichero o versionadas.
 
@@ -394,6 +394,8 @@ ediciones multi-fichero o versionadas.
 | `createFile` / `renameFile` / `deleteFile` | Rechazo explícito: Katana no toca el sistema de ficheros |
 | Rango fuera de límites, invertido o solapado | Rechazo antes de escribir; `failed` |
 | `textDocument.version` obsoleta | Rechazo por versión incompatible; `failed`, nada aplicado |
+| `version`/`kind`/`documentChanges` como `null` JSON (`vim.NIL`) | Se tratan como ausentes; la edición se aplica con los campos presentes |
+| Acción LSP con campos `null` (`edit`, `command`, `data`, `disabled`, ...) | Normalización a `nil`; `resolve` no borra datos ya conocidos |
 | Fallo inesperado a mitad de escritura | Intento de rollback verificado; `failed` si se restauró todo, `partial` con `rollback = failed` si no |
 | Buffer modificado por el usuario tras la edición | No se revierte para no pisar el cambio; `partial`/`rollback = failed` |
 | Resolución con error | `failed` en `stage = resolve`, notificado; no se finge éxito |

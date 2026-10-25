@@ -16,6 +16,8 @@
 --- normalización se elige uno (`execute_fn` gana si están los dos) y el executor
 --- sólo conoce `execute_fn`.
 
+local optional = require("katana.core.optional")
+
 local M = {}
 
 ---@class KatanaAction
@@ -78,35 +80,47 @@ function M.normalize(spec, opts)
     return nil, "la acción no tiene un título válido"
   end
 
-  if spec.run ~= nil and not is_function(spec.run) then
+  opts = opts or {}
+
+  -- Los campos opcionales pueden llegar como `vim.NIL` desde JSON. Se
+  -- normalizan una sola vez para que el resto del plugin pueda usar `nil`
+  -- como "ausente" sin comprobaciones especiales.
+  local run = optional.value(spec.run)
+  local execute_fn_spec = optional.value(spec.execute_fn)
+  local resolve_fn = optional.value(spec.resolve_fn)
+  local edit = optional.value(spec.edit)
+  local command = optional.value(spec.command)
+  local disabled = optional.value(spec.disabled)
+  local source_spec = optional.value(spec.source)
+  local raw = optional.value(opts.raw)
+
+  if run ~= nil and not is_function(run) then
     return nil, "el campo 'run' debe ser una función"
   end
 
-  if spec.execute_fn ~= nil and not is_function(spec.execute_fn) then
+  if execute_fn_spec ~= nil and not is_function(execute_fn_spec) then
     return nil, "el campo 'execute_fn' debe ser una función"
   end
 
-  if spec.resolve_fn ~= nil and not is_function(spec.resolve_fn) then
+  if resolve_fn ~= nil and not is_function(resolve_fn) then
     return nil, "el campo 'resolve_fn' debe ser una función"
   end
 
-  if spec.edit ~= nil and type(spec.edit) ~= "table" then
+  if edit ~= nil and type(edit) ~= "table" then
     return nil, "el campo 'edit' debe ser un WorkspaceEdit"
   end
 
-  if spec.command ~= nil and type(spec.command) ~= "table" and type(spec.command) ~= "string" then
+  if command ~= nil and type(command) ~= "table" and type(command) ~= "string" then
     return nil, "el campo 'command' debe ser una tabla o una cadena"
   end
 
-  if not is_disabled(spec.disabled) then
+  if not is_disabled(disabled) then
     return nil, "el campo 'disabled' debe ser booleano o una tabla"
   end
 
-  opts = opts or {}
-
-  local source = opts.source
+  local source = optional.value(opts.source)
   if type(source) ~= "string" or source == "" then
-    source = spec.source
+    source = source_spec
   end
   if type(source) ~= "string" or source == "" then
     source = opts.default_source or "user:unknown"
@@ -116,35 +130,41 @@ function M.normalize(spec, opts)
   end
 
   -- `execute_fn` tiene prioridad; `run` es el nombre público recomendado.
-  local execute_fn = spec.execute_fn
-  if not execute_fn and is_function(spec.run) then
+  local execute_fn = execute_fn_spec
+  if not execute_fn and is_function(run) then
     execute_fn = function(action)
-      return spec.run(action)
+      return run(action)
     end
   end
 
+  if raw == nil then
+    raw = spec
+  end
+
+  local is_preferred = optional.value(spec.isPreferred)
+
   local normalized = {
     title = spec.title,
-    kind = spec.kind,
+    kind = optional.value(spec.kind),
     source = source,
-    raw = opts.raw ~= nil and opts.raw or spec,
-    resolve_fn = spec.resolve_fn,
+    raw = raw,
+    resolve_fn = resolve_fn,
     execute_fn = execute_fn,
-    edit = spec.edit,
-    command = spec.command,
-    diagnostics = spec.diagnostics,
-    client_id = spec.client_id,
-    encoding = spec.encoding,
-    isPreferred = spec.isPreferred and true or false,
-    disabled = spec.disabled,
-    id = spec.id,
-    data = spec.data,
-    priority = spec.priority,
-    variants = spec.variants,
-    _client_name = spec._client_name,
-    _client_id = spec._client_id,
-    _bufnr = spec._bufnr,
-    _provider = spec._provider,
+    edit = edit,
+    command = command,
+    diagnostics = optional.value(spec.diagnostics),
+    client_id = optional.value(spec.client_id),
+    encoding = optional.value(spec.encoding),
+    isPreferred = is_preferred and true or false,
+    disabled = disabled,
+    id = optional.value(spec.id),
+    data = optional.value(spec.data),
+    priority = optional.value(spec.priority),
+    variants = optional.value(spec.variants),
+    _client_name = optional.value(spec._client_name),
+    _client_id = optional.value(spec._client_id),
+    _bufnr = optional.value(spec._bufnr),
+    _provider = optional.value(spec._provider),
   }
 
   return normalized, nil
@@ -158,10 +178,10 @@ function M.has_effect(action)
     return false
   end
 
-  return action.edit ~= nil
-    or action.command ~= nil
-    or is_function(action.execute_fn)
-    or is_function(action.resolve_fn)
+  return optional.value(action.edit) ~= nil
+    or optional.value(action.command) ~= nil
+    or is_function(optional.value(action.execute_fn))
+    or is_function(optional.value(action.resolve_fn))
 end
 
 return M
