@@ -32,16 +32,17 @@ Comprobación previa (sin GUI):
 cd C:/Users/rosas/Documents/code/plugins/Katana.nvim
 nvim --headless -u NONE -l scripts/smoke.lua
 nvim --headless -u NONE -l scripts/lsp_conformance.lua
+nvim --headless -u NONE -l scripts/apply.lua
 nvim --headless -u NONE -l scripts/ui.lua
 nvim --headless -u NONE -l scripts/icons.lua
 nvim --headless -u NONE -l scripts/e2e.lua
 ```
 
-Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 11 + 42 +
-8 + 12 comprobaciones). Si `Volt` (dependencia de la UI) o `clangd` no están
-disponibles, los scripts lo indican con `SKIP` y terminan sin errores. Volt se
-busca en el `runtimepath` y en las rutas habituales de lazy.nvim; se puede
-forzar con `KATANA_VOLT=/ruta`.
+Salida esperada: todas las líneas `OK` y el resumen `0 fallos` (49 + 26 + 74 +
+74 + 8 + 12 comprobaciones). Si `Volt` (dependencia de la UI) o `clangd` no
+están disponibles, los scripts lo indican con `SKIP` y terminan sin errores.
+Volt se busca en el `runtimepath` y en las rutas habituales de lazy.nvim; se
+puede forzar con `KATANA_VOLT=/ruta`.
 
 ---
 
@@ -136,6 +137,11 @@ las que ya vienen resueltas lo traen en línea).
 Este es el test crítico del *undo agrupado*: si un solo `u` revierte también tus
 ediciones previas, revisar `katana.lsp.workspace.close_undo_block` (reasignación
 de `undolevels`).
+
+> **Multi-fichero**: si una acción edita varios buffers, la escritura se valida
+> entera antes de empezar, pero el undo sigue siendo por buffer: hace falta un
+> `u` en cada uno. Katana no promete una transacción entre ficheros; si algo
+> falla a mitad intenta revertir lo ya escrito y lo verifica (ver sección 7).
 
 ### 2.6 Acciones con comando
 
@@ -340,9 +346,13 @@ comas.
 | Terminal estrecho (< 60 columnas) | El panel de previsualización se omite; el picker sigue usable |
 | `<C-c>` / `<Esc>` / `q` | Cierra el picker y devuelve el foco al buffer original |
 | Abrir el picker dos veces seguidas | No quedan ventanas huérfanas ni buffers de trabajo (`:ls` limpio) |
-| Acción que falla (p. ej. un servidor que devuelve basura) | `vim.notify` a nivel ERROR, sin excepción no capturada |
-| `codeAction/resolve` que no responde | Aviso de timeout a los 5 s, sin bloquear la interfaz |
-| Acción deshabilitada (`disabled`) | Se muestra en gris (`KatanaDisabled`) y al confirmarla avisa sin aplicarse |
+| Acción que falla (p. ej. un servidor que devuelve basura) | `vim.notify` a nivel ERROR, sin excepción no capturada; `status = failed` |
+| `codeAction/resolve` que no responde | `status = timed_out` a los 5 s, aviso ERROR y **nada aplicado**; la UI no se bloquea |
+| Confirmar mientras `resolve_on_open` resuelve | Una sola petición `codeAction/resolve`; no se aplica dos veces |
+| Pulsar dos veces `1`-`9` o `<CR>` | La acción se ejecuta una sola vez (el picker se cierra antes de ejecutar) |
+| Todas las acciones `disabled` con `hide_disabled = true` | Un único aviso; no se abre una ventana vacía |
+| Fallo al abrir la UI (Volt) | `window.open` devuelve `false, error`; no quedan ventanas/buffers y `guicursor` se restaura |
+| `command` sin cliente inequívoco y varios clientes conectados | Se rechaza (`failed`) en vez de ejecutarlo con un cliente arbitrario |
 
 ---
 
@@ -367,7 +377,42 @@ llevaba la lista `diagnostics` ausente.
 
 ---
 
-## 7. Checklist final
+## 7. Integridad del `WorkspaceEdit` y contrato de resultados
+
+Estos casos se comprueban sin GUI con `scripts/apply.lua` (74 comprobaciones).
+También se pueden reproducir desde el picker con un servidor que devuelva
+ediciones multi-fichero o versionadas.
+
+| Caso | Resultado esperado |
+| --- | --- |
+| Edición multi-fichero válida | Se validan todos los destinos antes de escribir; un `u` por buffer modificado |
+| `documentChanges` y `changes` en el mismo edit | Sólo se aplica `documentChanges` (nunca las dos) |
+| Varias entradas para la misma URI | Se fusionan en orden antes de validar rangos |
+| URI que no es `file:` | Rechazo antes de escribir; `failed`, nada aplicado |
+| Fichero destino inexistente o ilegible | Rechazo antes de escribir; `failed` |
+| Buffer destino con `buftype` no normal | Rechazo antes de escribir; `failed` |
+| `createFile` / `renameFile` / `deleteFile` | Rechazo explícito: Katana no toca el sistema de ficheros |
+| Rango fuera de límites, invertido o solapado | Rechazo antes de escribir; `failed` |
+| `textDocument.version` obsoleta | Rechazo por versión incompatible; `failed`, nada aplicado |
+| Fallo inesperado a mitad de escritura | Intento de rollback verificado; `failed` si se restauró todo, `partial` con `rollback = failed` si no |
+| Buffer modificado por el usuario tras la edición | No se revierte para no pisar el cambio; `partial`/`rollback = failed` |
+| Resolución con error | `failed` en `stage = resolve`, notificado; no se finge éxito |
+| Resolución sin respuesta | `timed_out`; nada aplicado |
+| Cancelación antes de aplicar | `cancelled`; nada aplicado |
+| Edición aplicada y falla el comando/`execute_fn` | `partial`; **no** se revierte automáticamente (el comando pudo tener efectos externos) |
+| Acción sin `edit`, `command` ni `execute_fn` | `failed` en `stage = validate` |
+| Acción `disabled` | `failed` con `reason = disabled`, notificación WARN, sin aplicar |
+| Acción correcta | `success`; no se notifica nada |
+| `opts.notify = false` / `opts.on_result` | Sin notificación / callback recibe el `KatanaResult` |
+
+El resultado expuesto es `KatanaResult` (`status`, `action`, `title`, `message`,
+`error`, `stage`, `reason`, `rollback`, `effects`, `duration_ms`). Para acciones
+con `resolve_fn`, `execute()` puede devolver un `KatanaExecution` con
+`cancel(reason)`; el resultado final llega por `opts.on_result`.
+
+---
+
+## 8. Checklist final
 
 - [ ] `:CodeActions` abre el picker con la lista agrupada por kind
 - [ ] Las cabeceras de grupo aparecen en el orden configurado
@@ -375,7 +420,12 @@ llevaba la lista `diagnostics` ausente.
 - [ ] No hay ventana ni texto de filtro: la lista muestra todas las acciones
 - [ ] El diff del panel inferior es correcto y reactivo
 - [ ] Con un diff largo, el preview scrollea sin crecer por encima de `preview_max_height`
-- [ ] Un `u` deshace únicamente la acción
+- [ ] Un `u` deshace únicamente la acción (un `u` por buffer si edita varios ficheros)
+- [ ] Una edición con versión obsoleta, URI no `file:` o rangos inválidos se rechaza **antes** de escribir
+- [ ] Si falla un comando tras aplicar la edición, el resultado es `partial` (no se revierte a ciegas)
+- [ ] Un `codeAction/resolve` sin respuesta termina como `timed_out` y no aplica nada
+- [ ] Confirmar dos veces (o pulsar dos veces un atajo numérico) ejecuta una sola vez
+- [ ] Con todas las acciones deshabilitadas y `hide_disabled`, hay un solo aviso y no se abre la UI
 - [ ] El picker se cierra y devuelve el foco
 - [ ] Las acciones de Tree-sitter y las registradas por el usuario aparecen
 - [ ] `clangd` ofrece *insert ';'* y se aplica en el sitio correcto

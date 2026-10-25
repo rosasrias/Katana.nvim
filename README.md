@@ -243,8 +243,11 @@ Las acciones se ordenan por una puntuación combinada:
 A igualdad se desempata con `kind_weights`, `lsp_weights` y, en último caso, de
 forma alfabética.
 
-Con `dedupe = true`, las acciones con el mismo `title` + `kind` se fusionan en una
+Con `dedupe = true`, las acciones con el mismo `title`, `kind` **y payload**
+(`edit`, `command`, `resolve_fn`/`data`, `execute_fn`, `id`) se fusionan en una
 sola entrada que acumula todos sus orígenes (se muestran separados por comas).
+Dos servidores que devuelven el mismo título con ediciones distintas son filas
+separadas: aplicar una no equivale a aplicar la otra.
 
 ---
 
@@ -296,6 +299,12 @@ require("katana").register_action({
 })
 ```
 
+`run` y `execute_fn` son alias públicos: ambos reciben la **acción normalizada**
+como único argumento. Si se pasan los dos, gana `execute_fn`; internamente sólo
+se conserva `execute_fn`. Un `run`/`execute_fn` que lance un error no deja la
+ejecución en silencio: el resultado queda como `failed` (o `partial` si la
+edición/comando anterior ya se aplicó) y se notifica.
+
 ### `require("katana").register_provider(fn, name?)`
 
 Registra un proveedor de acciones. Recibe el contexto de la petición y devuelve
@@ -342,20 +351,70 @@ Todas las fuentes producen el mismo tipo (`KatanaAction`):
 El ejecutor (`katana.apply`) encadena siempre los mismos pasos:
 
 1. **resolve** - si la acción trae `resolve_fn` y no trae `edit`/`command`, se
-   espera la resolución (`codeAction/resolve`), con un timeout de 5 s por defecto.
-2. **edit** - se aplica el `WorkspaceEdit` (respetando la codificación de
-   posiciones del cliente: `utf-8`, `utf-16` o `utf-32`).
-3. **command** - se ejecuta el comando LSP mediante `client:exec_cmd`.
+   espera la resolución (`codeAction/resolve`), con un timeout de 5 s por defecto
+   (`opts.timeout`). Si no llega, la acción termina como `timed_out` y **no se
+   aplica nada**. La resolución se comparte: una acción sólo lanza una petición,
+   aunque el usuario confirme mientras `resolve_on_open` ya la está resolviendo.
+2. **edit** - se valida y prepara el `WorkspaceEdit` completo y después se aplica
+   (respetando la codificación de posiciones del cliente: `utf-8`, `utf-16` o
+   `utf-32`).
+3. **command** - se ejecuta el comando LSP mediante `client:exec_cmd`. Si la
+   acción no indica cliente, sólo se usa el único cliente conectado; con varios
+   clientes se rechaza en vez de elegir uno al azar.
 4. **execute_fn** - se ejecuta la lógica propia de la acción.
 
-Cualquier error se notifica con `vim.notify(..., vim.log.levels.ERROR)`.
+### Resultado de la ejecución
+
+`require("katana.apply").execute(action, opts)` devuelve un `KatanaResult`
+cuando la acción puede ejecutarse de forma síncrona. Si necesita resolver, puede
+devolver un `KatanaExecution` (con `cancel(reason)`); el resultado final llega
+por `opts.on_result`. Estados:
+
+| `status` | Significado |
+| --- | --- |
+| `success` | Todo lo que había que hacer se hizo. |
+| `failed` | No quedó ningún efecto persistente (o se revirtió). |
+| `partial` | Algo se aplicó y un paso posterior falló; **no se revierte automáticamente** porque el comando/callback pudo producir efectos externos. |
+| `cancelled` | Se canceló antes de aplicar la acción. |
+| `timed_out` | La resolución no llegó a tiempo; no se aplicó nada. |
+
+El resultado incluye `stage`, `message`/`error`, `effects` (`edit`, `command`,
+`execute_fn`, `buffers`), `rollback` (`not_needed`, `restored`, `failed`) y
+`duration_ms`. Las notificaciones se centralizan en
+`apply.notify_result`: `success` no notifica; el resto usa `INFO` (cancelada),
+`WARN` (deshabilitada) o `ERROR`. Se pueden desactivar con `opts.notify = false`.
+Un fallo al notificar o un error dentro de `opts.on_result` no oculta el
+resultado: se guarda en `notification_error`/`callback_error`.
+
+### Integridad del `WorkspaceEdit`
+
+Antes de escribir en el primer buffer se validan **todos** los destinos:
+
+- `documentChanges` tiene prioridad sobre `changes` (no se aplican los dos:
+  muchos servidores mandan el mismo contenido en ambos y se duplicaría).
+- Varias entradas para la misma URI se fusionan en orden.
+- Se rechazan las operaciones de recurso (`createFile`, `renameFile`,
+  `deleteFile`): Katana no toca el sistema de ficheros.
+- Sólo se aceptan URIs `file:`; el fichero debe existir y ser legible si no está
+  abierto en un buffer, y el buffer debe ser normal (`buftype` vacío).
+- Los rangos deben ser válidos, estar dentro del buffer y no solaparse.
+- Si la edición trae `textDocument.version`, debe coincidir con la versión que
+  Neovim conoce para el buffer.
+- Un plan no se puede aplicar dos veces (`plan.applied`).
+
+No hay una transacción entre ficheros. Si un fallo inesperado ocurre a mitad de
+la escritura, se intenta revertir **sólo** los buffers ya escritos por esta
+operación, y sólo si su `changedtick` no cambió desde entonces. La reversión se
+verifica: primero `undo`, después restauración del snapshot de líneas; si no se
+puede verificar, el resultado es `partial` con `rollback = "failed"`.
 
 ### Undo agrupado
 
 Antes de aplicar los cambios se cierra el bloque de undo previo del buffer
 (reasignando `undolevels`, que es la forma documentada en `:help undo-break`).
-Consecuencia: **un único `u` deshace la acción completa** y no arrastra la
-edición previa del usuario.
+Con un solo fichero, **un único `u` deshace la acción completa** y no arrastra la
+edición previa del usuario. En un `WorkspaceEdit` multi-fichero el undo sigue
+siendo por buffer: hace falta un `u` en cada buffer modificado.
 
 ---
 
@@ -507,9 +566,10 @@ lua/katana/
 ├── plugin.lua            -- comandos (:CodeActions, :KatanaSource, :KatanaDebug) y atajo
 ├── state.lua             -- estado del picker abierto (buffers, ventanas, filas)
 ├── register.lua          -- acciones registradas por el usuario
-├── apply.lua             -- resolve -> edit -> command -> execute_fn
+├── apply.lua             -- executor: resultados, notificaciones y rollback
 ├── utils.lua             -- labels, grupos por kind y títulos compactos
 ├── core/
+│   ├── action.lua        -- contrato normalizado KatanaAction
 │   ├── fetch.lua         -- recogida de acciones (LSP, proveedores, TS, registradas)
 │   ├── prioritize.lua    -- priorización, ordenación y deduplicación
 │   ├── group.lua         -- agrupación por kind (cabeceras y orden de grupos)
@@ -529,7 +589,7 @@ lua/katana/
     └── diff.lua          -- previsualización reactiva del diff
 
 plugin/katana.lua         -- carga los comandos de usuario
-scripts/                  -- pruebas headless (smoke, conformance, ui, icons, e2e)
+scripts/                  -- pruebas headless (smoke, conformance, apply, ui, icons, e2e)
 ```
 
 ---
@@ -540,8 +600,9 @@ Pruebas headless (no necesitan interfaz):
 
 ```bash
 nvim --headless -u NONE -l scripts/smoke.lua           # motor (49 comprobaciones)
-nvim --headless -u NONE -l scripts/lsp_conformance.lua # conformidad LSP (11 comprobaciones)
-nvim --headless -u NONE -l scripts/ui.lua              # UI sobre Volt (42 comprobaciones)
+nvim --headless -u NONE -l scripts/lsp_conformance.lua # conformidad LSP (26 comprobaciones)
+nvim --headless -u NONE -l scripts/apply.lua           # executor y WorkspaceEdit (74 comprobaciones)
+nvim --headless -u NONE -l scripts/ui.lua              # UI sobre Volt (74 comprobaciones)
 nvim --headless -u NONE -l scripts/icons.lua           # iconos y colores (8 comprobaciones)
 nvim --headless -u NONE -l scripts/e2e.lua             # LSP real con clangd (12 comprobaciones)
 ```

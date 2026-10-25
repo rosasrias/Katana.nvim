@@ -67,7 +67,15 @@ function M.open(opts)
     end
   end
 
-  require("katana.core.fetch").get(opts)
+  local ok, result = pcall(require("katana.core.fetch").get, opts)
+  if not ok then
+    state.last = state.last or {}
+    state.last.error = "fetch: " .. tostring(result)
+    pcall(vim.notify, "Katana: error al recoger acciones: " .. tostring(result), vim.log.levels.ERROR)
+    return nil
+  end
+
+  return result
 end
 
 --- Atajo: abre el picker de acciones.
@@ -117,33 +125,55 @@ end
 ---@param actions KatanaAction[]
 ---@param opts table|nil
 ---@param ctx KatanaContext|nil
-function M._on_actions(actions, opts, ctx)
-  if not actions or #actions == 0 then
-    -- Si el picker ya está abierto (esperando), se cierra para no dejarlo colgado.
-    local window = require("katana.ui.window")
-    if window.is_open() then
-      window.close()
-    end
-
-    vim.notify(
-      "Katana: no code actions found (run :KatanaDebug for details)",
-      vim.log.levels.INFO
-    )
+---@param token integer|nil generación de la petición que produjo `actions`
+function M._on_actions(actions, opts, ctx, token)
+  -- Una respuesta vieja no debe oponerse al resultado de una petición nueva.
+  if token ~= nil and not require("katana.core.fetch").is_current(token) then
     return
   end
 
   opts = opts or {}
 
   local options = config.options
-  local collected = actions
+  local collected = actions or {}
 
+  -- El filtro va **antes** de decidir si hay algo que mostrar: si todas las
+  -- acciones están deshabilitadas, no se abre una UI vacía ni se avisa dos
+  -- veces.
   if options.hide_disabled then
     collected = vim.tbl_filter(function(action)
       return not action.disabled
     end, collected)
   end
 
+  if #collected == 0 then
+    -- Si el picker ya está abierto (esperando), se cierra para no dejarlo
+    -- colgado. No se requiere el módulo de UI si no hay nada abierto (así un
+    -- fallo de Volt no impide informar del resultado).
+    if state.open then
+      pcall(function()
+        require("katana.ui.window").close()
+      end)
+    end
+
+    pcall(
+      vim.notify,
+      "Katana: no code actions found (run :KatanaDebug for details)",
+      vim.log.levels.INFO
+    )
+    return
+  end
+
   local sorted = require("katana.core.prioritize").filter_and_sort(collected, ctx)
+
+  if #sorted == 0 then
+    pcall(
+      vim.notify,
+      "Katana: no code actions found after filtering (run :KatanaDebug for details)",
+      vim.log.levels.INFO
+    )
+    return
+  end
 
   if options.resolve_on_open then
     require("katana.core.resolve").resolve_batch(sorted, options.resolve_limit)
@@ -157,7 +187,7 @@ function M._on_actions(actions, opts, ctx)
 
   -- El picker se abre ahora, con las acciones ya recibidas y ordenadas.
   metrics.start("picker_open")
-  local open_ok, open_err = pcall(window.open, sorted, function(action)
+  local open_ok, open_result, open_err = pcall(window.open, sorted, function(action)
     require("katana.apply").execute(action, {
       bufnr = bufnr,
       win = win,
@@ -171,9 +201,17 @@ function M._on_actions(actions, opts, ctx)
   end
 
   if not open_ok then
+    open_err = open_result
+  elseif open_result == false then
+    open_err = open_err or "window.open devolvió false"
+  else
+    open_err = nil
+  end
+
+  if open_err then
     state.last = state.last or {}
-    state.last.error = string.format("window.open: %s", open_err)
-    vim.notify("Katana: error al abrir el picker: " .. tostring(open_err), vim.log.levels.ERROR)
+    state.last.error = string.format("window.open: %s", tostring(open_err))
+    pcall(vim.notify, "Katana: error al abrir el picker: " .. tostring(open_err), vim.log.levels.ERROR)
   end
 end
 

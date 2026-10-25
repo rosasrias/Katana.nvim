@@ -28,6 +28,9 @@ jobs:
       - name: LSP conformance (resolución, WorkspaceEdit, multi-archivo)
         run: nvim --headless -u NONE -l scripts/lsp_conformance.lua
 
+      - name: Apply / executor (validación, rollback, resultados, timeouts)
+        run: nvim --headless -u NONE -l scripts/apply.lua
+
       - name: Checkout Volt (motor de la UI)
         uses: actions/checkout@v4
         with:

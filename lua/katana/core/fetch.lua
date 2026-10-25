@@ -11,27 +11,38 @@
 
 local workspace = require("katana.lsp.workspace")
 local config = require("katana.config")
+local action_module = require("katana.core.action")
 
 local M = {}
 local state = require("katana.state")
 
----@class KatanaAction
----@field title string Título legible de la acción
----@field kind string|nil Kind LSP (quickfix, refactor.extract, source.fixAll, ...)
----@field source string Origen (`lsp:lua_ls`, `ts`, `user:mi-plugin`, ...)
----@field raw any Payload original
----@field resolve_fn fun(cb: fun(action: KatanaAction))|nil Resolución diferida
----@field execute_fn fun(action: KatanaAction)|nil Ejecución personalizada
----@field edit vim.lsp.WorkspaceEdit|nil Cambios a aplicar
----@field command lsp.Command|nil Comando a ejecutar
----@field diagnostics lsp.Diagnostic[]|nil Diagnósticos relacionados
----@field sources string[]|nil Orígenes fusionados (tras deduplicar)
----@field client_id integer|nil Cliente LSP propietario
----@field encoding KatanaEncoding|nil Codificación de posiciones del cliente
----@field isPreferred boolean|nil
----@field disabled table|boolean|nil
----@field _client_name string|nil Nombre del cliente LSP (compatibilidad)
----@field _bufnr integer|nil Buffer de origen (compatibilidad)
+--- Generación de la última petición lanzada.
+---
+--- Cada llamada a `get()` incrementa el contador. Las respuestas asíncronas
+--- llevan el token de su generación y se descartan si ya hay una petición más
+--- reciente: una respuesta lenta no debe reabrir la UI ni pisar el resultado
+--- nuevo.
+---@type integer
+M._generation = 0
+
+--- Empieza una petición nueva y devuelve su token.
+---@return integer
+function M.new_generation()
+  M._generation = (M._generation or 0) + 1
+  return M._generation
+end
+
+--- ¿Sigue siendo actual el token?
+---@param token integer|nil
+---@return boolean
+function M.is_current(token)
+  return token == nil or token == M._generation
+end
+
+--- Invalida las peticiones en curso (sus respuestas se descartarán).
+function M.cancel()
+  M._generation = (M._generation or 0) + 1
+end
 
 ---@class KatanaContext
 ---@field bufnr integer
@@ -483,11 +494,13 @@ function M.pull_diagnostics(client, ctx, cb)
   end
 
   -- Si el servidor no contesta, se sigue con lo que haya (sin diagnostics).
-  timer:start(config.options.pull_timeout or 2000, 0, function()
-    vim.schedule(function()
-      finish({})
+  if timer then
+    timer:start(config.options.pull_timeout or 2000, 0, function()
+      vim.schedule(function()
+        finish({})
+      end)
     end)
-  end)
+  end
 
   local ok = pcall(function()
     client:request("textDocument/diagnostic", {
@@ -573,7 +586,7 @@ function M.normalize_lsp_actions(result, client, ctx)
 
   for _, raw in ipairs(result or {}) do
     if type(raw) == "table" and raw.title then
-      local action = {
+      local action, normalize_err = action_module.normalize({
         title = raw.title,
         kind = raw.kind,
         source = "lsp:" .. (client.name or "unknown"),
@@ -591,33 +604,64 @@ function M.normalize_lsp_actions(result, client, ctx)
         _client_name = client.name,
         _client_id = client.id,
         _bufnr = ctx.bufnr,
-      }
+      })
+
+      if not action then
+        pcall(function()
+          vim.notify(
+            string.format(
+              "Katana: acción LSP de '%s' ignorada: %s",
+              tostring(client.name),
+              tostring(normalize_err)
+            ),
+            vim.log.levels.DEBUG
+          )
+        end)
+        goto continue
+      end
 
       -- `codeAction/resolve` sólo hace falta si el servidor ha devuelto `data`.
       if raw.data and client:supports_method("codeAction/resolve", ctx.bufnr) then
         action.resolve_fn = function(cb)
           if client.is_stopped and client:is_stopped() then
-            cb(action)
+            cb(action, "el cliente LSP se detuvo antes de resolver la acción")
             return
           end
 
           -- Los parámetros de `codeAction/resolve` son la propia acción.
-          client:request("codeAction/resolve", raw, function(err, resolved)
-            if err == nil and resolved then
+          local ok_request, request_err = pcall(function()
+            client:request("codeAction/resolve", raw, function(err, resolved)
+              if err ~= nil then
+                cb(action, err)
+                return
+              end
+
+              if type(resolved) ~= "table" then
+                cb(action, "respuesta inválida de codeAction/resolve")
+                return
+              end
+
               action.edit = resolved.edit or action.edit
               action.command = resolved.command or action.command
+              action.diagnostics = resolved.diagnostics or action.diagnostics
               action.isPreferred = resolved.isPreferred or action.isPreferred
               action.disabled = resolved.disabled or action.disabled
               action.data = resolved.data or action.data
               action.raw = resolved
-            end
-            cb(action)
-          end, ctx.bufnr)
+              cb(action, nil)
+            end, ctx.bufnr)
+          end)
+
+          if not ok_request then
+            cb(action, request_err)
+          end
         end
       end
 
       actions[#actions + 1] = action
     end
+
+    ::continue::
   end
 
   return actions
@@ -628,7 +672,8 @@ end
 ---@param ctx KatanaContext
 ---@param opts table
 ---@param done fun(actions: KatanaAction[])
-local function request_lsp(client, ctx, opts, done)
+---@param record_error fun(source: string, err: any)|nil
+local function request_lsp(client, ctx, opts, done, record_error)
   if not client:supports_method("textDocument/codeAction", ctx.bufnr) then
     done({})
     return
@@ -698,16 +743,30 @@ local function request_lsp(client, ctx, opts, done)
 
     local timeout_ms = opts.request_timeout or config.options.lsp_request_timeout or 3000
     local req_finished = false
+    local timer = nil
+
+    local function stop_local_timer()
+      if timer then
+        pcall(function()
+          timer:stop()
+          if not timer:is_closing() then
+            timer:close()
+          end
+        end)
+        timer = nil
+      end
+    end
 
     local function safe_cb(actions)
       if req_finished or finished then
         return
       end
       req_finished = true
+      stop_local_timer()
       cb(actions or {})
     end
 
-    local timer = vim.uv.new_timer()
+    timer = vim.uv.new_timer()
     if timer then
       timers[#timers + 1] = timer
       timer:start(timeout_ms, 0, function()
@@ -715,11 +774,23 @@ local function request_lsp(client, ctx, opts, done)
           if req_finished or finished then
             return
           end
+          stop_local_timer()
           req_finished = true
-          pcall(function()
-            vim.notify("Katana: timeout de codeAction en " .. (client.name or "?"), vim.log.levels.WARN)
-          end)
-          safe_cb({})
+
+          -- Un timeout por rango/cliente puede ser normal (el servidor tarda o
+          -- no soporta bien codeAction). Se registra para `:KatanaDebug` y se
+          -- sigue con las demás respuestas; sin esto el contador de peticiones
+          -- pendientes nunca bajaría y el picker no llegaría a abrirse.
+          if record_error then
+            record_error(
+              "lsp:" .. tostring(client.name or "?"),
+              string.format("timeout de codeAction (%d ms)", timeout_ms)
+            )
+          end
+
+          -- `safe_cb` no sirve aquí: `req_finished` ya es true y saldría sin
+          -- llamar al callback. Se entrega la respuesta vacía directamente.
+          pcall(cb, {})
         end)
       end)
     end
@@ -729,7 +800,20 @@ local function request_lsp(client, ctx, opts, done)
         if req_finished or finished then
           return
         end
-        if err ~= nil or type(result) ~= "table" then
+        if err ~= nil then
+          if record_error then
+            record_error("lsp:" .. tostring(client.name or "?"), err)
+          end
+          safe_cb({})
+          return
+        end
+        if type(result) ~= "table" then
+          if record_error and result ~= nil then
+            record_error(
+              "lsp:" .. tostring(client.name or "?"),
+              "respuesta inválida de textDocument/codeAction"
+            )
+          end
           safe_cb({})
           return
         end
@@ -739,6 +823,9 @@ local function request_lsp(client, ctx, opts, done)
     end)
 
     if not ok then
+      if record_error then
+        record_error("lsp:" .. tostring(client.name or "?"), "no se pudo enviar textDocument/codeAction")
+      end
       safe_cb({})
     end
   end
@@ -811,7 +898,7 @@ end
 --- Recoge acciones de todas las fuentes y se las pasa a `done`.
 ---@param ctx KatanaContext
 ---@param opts table|nil
----@param done fun(actions: KatanaAction[])
+---@param done fun(actions: KatanaAction[], errors: table[]|nil)
 function M.get_all_actions(ctx, opts, done)
   opts = opts or {}
 
@@ -833,11 +920,21 @@ function M.get_all_actions(ctx, opts, done)
   end
 
   -- 1. Proveedores registrados por el usuario.
-  local ok_providers, provider_actions = pcall(require("katana.core.providers").collect, ctx)
+  local ok_providers, provider_actions, provider_errors = pcall(require("katana.core.providers").collect, ctx)
   if not ok_providers then
     record_error("proveedor", provider_actions)
-  elseif type(provider_actions) == "table" then
-    collect(provider_actions)
+  else
+    if type(provider_actions) == "table" then
+      collect(provider_actions)
+    end
+    -- `providers.collect` ya notificó cada error; aquí sólo se acumula para
+    -- `:KatanaDebug` (no se duplica el aviso).
+    for _, provider_error in ipairs(provider_errors or {}) do
+      errors[#errors + 1] = {
+        source = provider_error.source,
+        err = provider_error.err,
+      }
+    end
   end
 
   -- 2. Proveedor de Tree-sitter.
@@ -869,11 +966,16 @@ function M.get_all_actions(ctx, opts, done)
       return
     end
     finished = true
-    if #errors > 0 then
+
+    -- Los errores se guardan siempre (también la lista vacía) para que
+    -- `:KatanaDebug` no muestre errores de una petición anterior. Si esta
+    -- respuesta pertenece a una generación antigua, no se escribe nada.
+    if M.is_current(opts._token) then
       state.last = state.last or {}
-      state.last.fetch_errors = errors
+      state.last.fetch_errors = #errors > 0 and errors or nil
     end
-    done(collected)
+
+    done(collected, errors)
   end
 
   for _, client in ipairs(clients) do
@@ -882,7 +984,7 @@ function M.get_all_actions(ctx, opts, done)
       collect(actions)
       pending = pending - 1
       maybe_finish()
-    end)
+    end, record_error)
   end
 
   issuing = false
@@ -891,30 +993,51 @@ end
 
 --- Punto de entrada: recoge las acciones del buffer actual y abre el picker.
 ---@param opts table|nil
+---@return integer|nil token generación de esta petición
 function M.get(opts)
   opts = opts or {}
 
+  local token = M.new_generation()
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local win = opts.win or vim.api.nvim_get_current_win()
 
-  local ctx = M.build_context(bufnr, win, opts)
+  local ok_ctx, ctx = pcall(M.build_context, bufnr, win, opts)
+  if not ok_ctx then
+    state.last = state.last or {}
+    state.last.error = "build_context: " .. tostring(ctx)
+    pcall(vim.notify, "Katana: error al preparar la petición: " .. tostring(ctx), vim.log.levels.ERROR)
+    return token
+  end
+
   local metrics = require("katana.metrics")
+
+  -- `get_all_actions` lo usa para no escribir estado de una respuesta vieja.
+  -- Se copia `opts` para no añadir campos internos a la tabla del llamador.
+  local fetch_opts = vim.tbl_extend("force", {}, opts)
+  fetch_opts._token = token
 
   metrics.start("fetch")
 
-  M.get_all_actions(ctx, opts, function(actions)
+  M.get_all_actions(ctx, fetch_opts, function(actions)
+    -- Una respuesta de una petición anterior no debe abrir la UI ni pisar el
+    -- resultado de la petición nueva.
+    if not M.is_current(token) then
+      return
+    end
+
     local fetch_ms = metrics.stop("fetch")
 
-    require("katana")._on_actions(actions, opts, ctx)
+    require("katana")._on_actions(actions, opts, ctx, token)
 
     -- Se guarda después de `_on_actions` porque `state.snapshot()` reemplaza
     -- `state.last`; así la métrica sobrevive para `:KatanaDebug`.
     if fetch_ms then
-      local state = require("katana.state")
       state.last = state.last or {}
       state.last.fetch_ms = fetch_ms
     end
   end)
+
+  return token
 end
 
 return M

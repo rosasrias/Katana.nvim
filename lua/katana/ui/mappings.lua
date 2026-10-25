@@ -7,7 +7,6 @@ local state = require("katana.state")
 local config = require("katana.config")
 local preview = require("katana.preview.diff")
 local list = require("katana.ui.list")
-local apply = require("katana.apply")
 
 local M = {}
 
@@ -94,30 +93,22 @@ function M.prev_group()
   end
 end
 
----@param index integer índice de acción (sólo acciones, no cabeceras)
-local function jump_to_action(index)
-  local target = nil
+--- Fila de la acción número `index` (sólo acciones, no cabeceras).
+---@param index integer
+---@return integer|nil
+local function action_row(index)
   local count = 0
 
   for i, item in ipairs(state.flat) do
     if item.type == "action" then
       count = count + 1
       if count == index then
-        target = i
-        break
+        return i
       end
     end
   end
 
-  if not target then
-    return
-  end
-
-  state.index = target
-  list.update_selection()
-  if config.options.auto_preview then
-    preview.update()
-  end
+  return nil
 end
 
 --- Registra los keymaps del buffer de la lista.
@@ -186,13 +177,23 @@ function M.setup_list()
 end
 
 --- Selecciona y ejecuta la acción con el atajo numérico dado.
+---
+--- Se usa `window.confirm()` (que cierra el picker **antes** de ejecutar) en
+--- lugar de `apply.run_current()`: así una pulsación repetida o un callback que
+--- dispare la acción no la ejecutan dos veces.
 ---@param n integer
 function M.select(n)
   if not state.open then
     return
   end
-  jump_to_action(n)
-  apply.run_current()
+
+  local target = action_row(n)
+  if not target then
+    return
+  end
+
+  state.index = target
+  require("katana.ui.window").confirm()
 end
 
 --- Registra todos los keymaps.

@@ -86,4 +86,144 @@ local res = ws.apply_to_lines({ "hello", "world" }, {
 }, "utf-8")
 report.check("apply_to_lines multi-línea", table.concat(res, "|") == "heX|Yrld", table.concat(res, "|"))
 
+-- 6) Deduplicación con payload de resolve
+local resolve_same_1 = { title = "Same", kind = "quickfix", source = "lsp:a", data = { id = 1 }, resolve_fn = function() end }
+local resolve_same_2 = { title = "Same", kind = "quickfix", source = "lsp:b", data = { id = 1 }, resolve_fn = function() end }
+report.check("dedupe fusiona mismo data/resolve", #prio.filter_and_sort({ resolve_same_1, resolve_same_2 }) == 1)
+
+local resolve_diff_1 = { title = "Same", kind = "quickfix", source = "lsp:a", data = { id = 1 }, resolve_fn = function() end }
+local resolve_diff_2 = { title = "Same", kind = "quickfix", source = "lsp:b", data = { id = 2 }, resolve_fn = function() end }
+report.check("dedupe conserva distinto data/resolve", #prio.filter_and_sort({ resolve_diff_1, resolve_diff_2 }) == 2)
+
+-- 7) Generación de peticiones: las respuestas viejas no son actuales
+local fetch = require("katana.core.fetch")
+local old_token = fetch.new_generation()
+local new_token = fetch.new_generation()
+report.check("token viejo descartado", fetch.is_current(old_token) == false)
+report.check("token nuevo actual", fetch.is_current(new_token) == true)
+fetch.cancel()
+report.check("cancel invalida el token actual", fetch.is_current(new_token) == false)
+
+-- 8) Un timeout de codeAction no bloquea la recogida
+--
+-- Se sustituye `vim.lsp.get_clients` por un cliente simulado que nunca responde.
+-- Así se ejercita el camino real de `request_lsp` (temporizador incluido) sin
+-- necesitar un servidor LSP externo.
+local config = require("katana.config")
+local providers = require("katana.core.providers")
+local register = require("katana.register")
+providers.clear()
+register.clear()
+
+local slow_callback = nil
+local slow_client = {
+  name = "slow",
+  id = 101,
+  offset_encoding = "utf-16",
+  supports_method = function(_, method)
+    return method == "textDocument/codeAction"
+  end,
+  request = function(_, method, _, callback)
+    if method == "textDocument/codeAction" then
+      slow_callback = callback
+    end
+  end,
+}
+
+local original_get_clients = vim.lsp.get_clients
+local original_notify = vim.notify
+local notify_count = 0
+vim.lsp.get_clients = function()
+  return { slow_client }
+end
+vim.notify = function()
+  notify_count = notify_count + 1
+end
+
+local old_range = config.options.code_action_range
+local old_pull = config.options.pull_diagnostics
+config.options.code_action_range = "cursor"
+config.options.pull_diagnostics = false
+
+-- Un proveedor que falla se acumula junto al timeout, sin impedir que `done`
+-- llegue a ejecutarse.
+providers.register(function()
+  error("proveedor roto")
+end, "bad")
+
+local fetch_ctx = fetch.build_context(vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win(), {})
+local fetch_done = false
+local fetch_actions = nil
+local fetch_errors = nil
+
+fetch.get_all_actions(fetch_ctx, { request_timeout = 50 }, function(actions, errors)
+  fetch_done = true
+  fetch_actions = actions
+  fetch_errors = errors
+end)
+
+vim.wait(1500, function()
+  return fetch_done
+end)
+
+report.check("el timeout de codeAction no cuelga la recogida", fetch_done == true)
+report.check("la recogida devuelve acciones", type(fetch_actions) == "table")
+report.check("el timeout se registra como error", fetch_errors and #fetch_errors >= 1, fetch_errors and #fetch_errors)
+report.check(
+  "el error del proveedor también se registra",
+  fetch_errors and #fetch_errors == 2,
+  fetch_errors and #fetch_errors
+)
+
+local state = require("katana.state")
+report.check(
+  "los errores sobreviven para :KatanaDebug",
+  state.last and state.last.fetch_errors and #state.last.fetch_errors == 2,
+  state.last and state.last.fetch_errors and #state.last.fetch_errors
+)
+
+-- Una respuesta tardía del servidor se ignora: la petición ya terminó.
+if slow_callback then
+  pcall(slow_callback, nil, { { title = "late", kind = "quickfix", data = {} } })
+end
+report.check("respuesta tardía ignorada", type(fetch_actions) == "table" and #fetch_actions == 0, fetch_actions and #fetch_actions)
+
+providers.clear()
+config.options.code_action_range = old_range
+config.options.pull_diagnostics = old_pull
+vim.lsp.get_clients = original_get_clients
+vim.notify = original_notify
+
+-- 9) Filtro `hide_disabled` y tokens en `_on_actions`
+local katana = require("katana")
+local old_hide = config.options.hide_disabled
+config.options.hide_disabled = true
+
+notify_count = 0
+vim.notify = function()
+  notify_count = notify_count + 1
+end
+
+katana._on_actions({
+  { title = "Disabled", source = "user:test", disabled = true },
+}, { bufnr = vim.api.nvim_get_current_buf() })
+
+report.check("acciones deshabilitadas no abren UI vacía", notify_count == 1, notify_count)
+report.check("el picker sigue cerrado", state.open == false)
+
+notify_count = 0
+katana._on_actions({}, { bufnr = vim.api.nvim_get_current_buf() })
+report.check("lista vacía avisa una sola vez", notify_count == 1, notify_count)
+
+notify_count = 0
+local stale_token = fetch.new_generation()
+fetch.cancel()
+katana._on_actions({
+  { title = "Stale", source = "user:test" },
+}, { bufnr = vim.api.nvim_get_current_buf() }, nil, stale_token)
+report.check("respuesta de una generación vieja no avisa ni abre", notify_count == 0)
+
+vim.notify = original_notify
+config.options.hide_disabled = old_hide
+
 report.finish()

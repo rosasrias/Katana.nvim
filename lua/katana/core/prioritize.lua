@@ -169,11 +169,39 @@ function M.sort(actions, ctx)
   return sorted
 end
 
+--- Serializa un payload para la firma de deduplicación.
+---
+--- Las tablas se codifican como JSON (determinista para los payloads LSP). Si
+--- no se pueden codificar (por ejemplo, porque contienen funciones), se usa una
+--- representación de respaldo estable dentro de la misma sesión.
+---@param value any
+---@return string
+local function serialize(value)
+  if type(value) == "string" then
+    return value
+  end
+
+  if type(value) == "table" then
+    local ok, encoded = pcall(vim.json.encode, value)
+    if ok and type(encoded) == "string" then
+      return encoded
+    end
+  end
+
+  return tostring(value)
+end
+
 --- Firma del contenido ejecutable de una acción.
 ---
 --- Dos acciones con el mismo título y kind pero con distinto `edit`, `command`,
 --- `resolve_fn` o `execute_fn` **no** son equivalentes: aplicarlas tiene efectos
 --- distintos. La deduplicación usa esta firma para no descartar ninguna.
+---
+--- Para acciones con `resolve_fn` no se usa la identidad de la función (dos
+--- clientes LSP crean closures distintas para la misma acción): se firma el
+--- payload original (`data`/`raw`), que es lo que determina la resolución.
+--- Para `execute_fn` sí se usa la identidad, porque dos callbacks distintos
+--- pueden hacer cosas distintas aunque compartan título.
 ---
 --- Para payloads grandes (un `WorkspaceEdit` completo) se usa el hash del
 --- serializado, no el texto, para que la clave no crezca sin límite.
@@ -187,20 +215,29 @@ function M.action_signature(action)
   local parts = {}
 
   if type(action.edit) == "table" then
-    local ok, encoded = pcall(vim.json.encode, action.edit)
-    parts[#parts + 1] = "edit:" .. (ok and encoded or tostring(action.edit))
+    parts[#parts + 1] = "edit:" .. serialize(action.edit)
   end
 
   if type(action.command) == "string" then
     parts[#parts + 1] = "cmd:" .. action.command
   elseif type(action.command) == "table" then
-    local ok, encoded = pcall(vim.json.encode, action.command)
-    parts[#parts + 1] = "cmd:" .. (ok and encoded or tostring(action.command.command))
+    parts[#parts + 1] = "cmd:" .. serialize(action.command)
+  end
+
+  if action.data ~= nil then
+    parts[#parts + 1] = "data:" .. serialize(action.data)
   end
 
   if action.resolve_fn then
-    parts[#parts + 1] = "resolve:" .. tostring(action.resolve_fn)
+    -- `data` es lo que el servidor usa para resolver; `raw` es el respaldo
+    -- cuando la acción no trae `data` (por ejemplo, acciones propias).
+    local payload = action.data
+    if payload == nil then
+      payload = action.raw
+    end
+    parts[#parts + 1] = "resolve:" .. (payload ~= nil and serialize(payload) or tostring(action.resolve_fn))
   end
+
   if action.execute_fn then
     parts[#parts + 1] = "exec:" .. tostring(action.execute_fn)
   end

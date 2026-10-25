@@ -68,8 +68,14 @@ M.guicursor_prev = nil
 M.last = {}
 
 --- Guarda una foto del estado del picker (para `:KatanaDebug`).
+---
+--- La información de la petición (errores de recogida y latencias) sobrevive a
+--- la foto: el snapshot se toma al abrir la UI, después de que `fetch` haya
+--- rellenado esos campos.
 ---@param phase string
 function M.snapshot(phase)
+  local previous = M.last or {}
+
   M.last = {
     phase = phase,
     at = vim.uv.now(),
@@ -78,7 +84,10 @@ function M.snapshot(phase)
     filtered = #M.filtered,
     flat = #M.flat,
     index = M.index,
-    error = M.last and M.last.error or nil,
+    error = previous.error,
+    fetch_errors = previous.fetch_errors,
+    fetch_ms = previous.fetch_ms,
+    open_ms = previous.open_ms,
   }
 end
 
@@ -87,6 +96,15 @@ function M.reset()
   if M.au_close then
     pcall(vim.api.nvim_del_autocmd, M.au_close)
     M.au_close = nil
+  end
+
+  -- `reset()` puede usarse sin pasar por `window.close()`: si el cursor sigue
+  -- siendo el del picker, se restaura antes de olvidar el valor original. Si el
+  -- usuario lo cambió mientras el picker estaba abierto, se respeta su valor.
+  if M.guicursor_prev and vim.o.guicursor == "a:block-KatanaCursor" then
+    pcall(function()
+      vim.o.guicursor = M.guicursor_prev
+    end)
   end
 
   for _, w in ipairs({ M.win_main, M.win_preview }) do

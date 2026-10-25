@@ -190,6 +190,10 @@ end
 --- el número de filas: hay que limpiar los extmarks anteriores y redimensionar el
 --- buffer de líneas en blanco.
 function M.render()
+  if not state.open then
+    return
+  end
+
   local buf = state.buf_main
   local win = state.win_main
 
@@ -216,11 +220,15 @@ function M.render()
 
   local rows = M.rows()
 
-  pcall(function()
-    vim.bo[buf].modifiable = true
-    volt.set_empty_lines(buf, #rows, state.list_width or 40)
-    vim.bo[buf].modifiable = false
-  end)
+  -- Un fallo al pintar no debe quedar silenciado: se propaga después de
+  -- devolver el buffer a su estado no modificable (si se propagara dentro del
+  -- pcall, el buffer se quedaría editable).
+  vim.bo[buf].modifiable = true
+  local ok_draw, draw_err = pcall(volt.set_empty_lines, buf, #rows, state.list_width or 40)
+  vim.bo[buf].modifiable = false
+  if not ok_draw then
+    error(draw_err)
+  end
 
   volt.gen_data({
     {

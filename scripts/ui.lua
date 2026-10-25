@@ -364,4 +364,135 @@ report.check("reapertura del picker", window.is_open() and #vim.api.nvim_list_wi
 window.close()
 report.check("cierre del picker", not window.is_open() and #vim.api.nvim_list_wins() == 1, #vim.api.nvim_list_wins())
 
+--------------------------------------------------------------------------------
+-- Ciclo de vida: reapertura, cierre idempotente y apertura fallida.
+--------------------------------------------------------------------------------
+
+--- Reabrir con el picker ya abierto desmonta el anterior: no quedan ventanas
+--- ni buffers huérfanos.
+window.open(actions, function() end)
+local first_buf = state.buf_main
+local first_win = state.win_main
+window.open(actions, function() end)
+report.check(
+  "reapertura con picker abierto no duplica ventanas",
+  window.is_open() and #vim.api.nvim_list_wins() == 3,
+  #vim.api.nvim_list_wins()
+)
+report.check(
+  "reapertura reemplaza buffer y ventana anteriores",
+  state.buf_main ~= first_buf and state.win_main ~= first_win and not vim.api.nvim_buf_is_valid(first_buf),
+  string.format("buf %s -> %s", tostring(first_buf), tostring(state.buf_main))
+)
+report.check("reapertura enfoca la lista nueva", vim.api.nvim_get_current_win() == state.win_main)
+window.close()
+report.check("tras reabrir, el foco vuelve al origen", vim.api.nvim_get_current_win() == origin_win)
+
+--- Cerrar dos veces (o sin picker) no debe fallar ni tocar nada.
+report.check("close es idempotente", window.close() == true and window.close() == true)
+report.check(
+  "close sin picker no deja ventanas extra",
+  not window.is_open() and #vim.api.nvim_list_wins() == 1,
+  #vim.api.nvim_list_wins()
+)
+
+--- Un fallo a mitad de apertura (Volt) no deja ventanas, buffers ni guicursor.
+local volt = require("volt")
+local volt_run = volt.run
+volt.run = function()
+  error("fallo de Volt forzado por el test")
+end
+local open_ok, open_err = window.open(actions, function() end)
+volt.run = volt_run
+
+report.check("apertura fallida devuelve false y error", open_ok == false and type(open_err) == "string", tostring(open_err))
+report.check("apertura fallida cierra el picker", not window.is_open())
+report.check(
+  "apertura fallida no deja ventanas",
+  #vim.api.nvim_list_wins() == 1,
+  #vim.api.nvim_list_wins()
+)
+report.check("apertura fallida no deja buffers de lista", state.buf_main == nil and state.buf_preview == nil)
+report.check("apertura fallida restaura guicursor", vim.o.guicursor == gcr_before, vim.o.guicursor)
+report.check("apertura fallida devuelve el foco al origen", vim.api.nvim_get_current_win() == origin_win)
+
+--------------------------------------------------------------------------------
+-- Atajos numéricos: una sola ejecución por pulsación.
+--------------------------------------------------------------------------------
+
+local shortcut_runs = {}
+window.open(actions, function(action)
+  shortcut_runs[#shortcut_runs + 1] = action.title
+end)
+require("katana.ui.mappings").select(2)
+report.check(
+  "atajo numérico ejecuta una sola acción",
+  #shortcut_runs == 1 and shortcut_runs[1] == "Extract function",
+  vim.inspect(shortcut_runs)
+)
+report.check("atajo numérico cierra el picker antes de ejecutar", not window.is_open() and #vim.api.nvim_list_wins() == 1)
+
+-- Una segunda pulsación (o un callback que reentre) no vuelve a ejecutar.
+require("katana.ui.mappings").select(2)
+report.check("segunda pulsación no reejecuta", #shortcut_runs == 1, #shortcut_runs)
+
+--------------------------------------------------------------------------------
+-- Generaciones: una respuesta vieja no abre la UI ni avisa.
+--------------------------------------------------------------------------------
+
+local fetch = require("katana.core.fetch")
+
+local function capture_notifications(fn)
+  local messages = {}
+  local notify = vim.notify
+  vim.notify = function(msg)
+    messages[#messages + 1] = msg
+  end
+  local ok, err = pcall(fn)
+  vim.notify = notify
+  assert(ok, err)
+  return messages
+end
+
+fetch.new_generation()
+local stale_token = fetch.new_generation() - 1
+local stale_notifications = capture_notifications(function()
+  katana._on_actions(actions, { bufnr = bufnr, win = origin_win }, nil, stale_token)
+end)
+report.check("respuesta de generación vieja no abre la UI", not window.is_open() and #vim.api.nvim_list_wins() == 1)
+report.check("respuesta de generación vieja no avisa", #stale_notifications == 0, vim.inspect(stale_notifications))
+
+--- El token vigente sí abre: el guardián no bloquea respuestas legítimas.
+local live_token = fetch.new_generation()
+katana._on_actions(actions, { bufnr = bufnr, win = origin_win }, nil, live_token)
+report.check("respuesta de la generación vigente abre el picker", window.is_open())
+window.close()
+fetch.cancel()
+
+--------------------------------------------------------------------------------
+-- `hide_disabled`: filtrar antes de decidir si se abre la UI.
+--------------------------------------------------------------------------------
+
+local config = require("katana.config")
+local hide_prev = config.options.hide_disabled
+config.options.hide_disabled = true
+
+local disabled = {
+  { title = "off 1", kind = "quickfix", source = "lsp:x", disabled = true },
+  { title = "off 2", kind = "source", source = "lsp:x", disabled = true },
+}
+local disabled_notifications = capture_notifications(function()
+  katana._on_actions(disabled, { bufnr = bufnr, win = origin_win })
+end)
+report.check("todas deshabilitadas: un solo aviso", #disabled_notifications == 1, #disabled_notifications)
+report.check("todas deshabilitadas: no se abre la UI", not window.is_open() and #vim.api.nvim_list_wins() == 1)
+config.options.hide_disabled = hide_prev
+
+--------------------------------------------------------------------------------
+-- Preview cerrado: `update`/`scroll` no deben tocar ventanas inexistentes.
+--------------------------------------------------------------------------------
+
+report.check("preview.update no falla con el picker cerrado", pcall(preview.update))
+report.check("preview.scroll no falla con el picker cerrado", pcall(preview.scroll, 3))
+
 report.finish()

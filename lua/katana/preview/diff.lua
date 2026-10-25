@@ -42,7 +42,14 @@ local function info_lines(action)
 end
 
 --- Actualiza el buffer de previsualización.
+---
+--- Una respuesta asíncrona tardía (por ejemplo, `codeAction/resolve`) no debe
+--- tocar el preview de un picker ya cerrado ni de otra selección.
 function M.update()
+  if not state.open then
+    return
+  end
+
   local buf = state.buf_preview
   if not buf or not vim.api.nvim_buf_is_valid(buf) then
     return
@@ -92,7 +99,7 @@ end
 ---@param delta integer líneas a desplazar (positivo = hacia abajo)
 function M.scroll(delta)
   local win = state.win_preview
-  if not win or not vim.api.nvim_win_is_valid(win) or delta == 0 then
+  if not state.open or not win or not vim.api.nvim_win_is_valid(win) or delta == 0 then
     return
   end
 
